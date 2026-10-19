@@ -1,51 +1,70 @@
-# Chapter 12: How to Use Expressions in n8n
-## Transform data dynamically without writing a full Code node
+# 🧬 How to Use Expressions in n8n
+## Dynamic Field Interpolation, Built-in Methods & Data Traversal
 
-Expressions let you read workflow data and perform small transformations directly inside node fields. They are a practical bridge between no-code workflows and low-code automation.
+<p align="center">
+  <a href="11_How_to_Optimize_Workflows.md">⬅️ Prev: Workflow Optimization</a> •
+  <a href="../README.md">Main Hub</a> •
+  <a href="13_How_to_Use_Code_Node_in_n8n.md">Next: The Code Node (JS & Python) ➡️</a> •
+  <a href="https://github.com/shashilabs-io/n8n-docs">GitHub Repository</a>
+</p>
 
-## Learning objectives
+---
 
-By the end of this chapter, you should be able to:
+## 🧭 How to Use This Chapter
 
-- Explain what an expression is and when to use one.
-- Switch a field from fixed input to expression mode.
-- Read fields using `$json` and access nested arrays and objects.
-- Use built-in n8n functions and JavaScript string methods.
-- Provide fallback values for missing data.
-- Format dates and calculate date differences.
-- Recognize when a Code node is more appropriate.
+> [!TIP]
+> **Low-Code Agility:** You don't need a heavy Code node for every data tweak. n8n expressions let you execute inline JavaScript, format Luxon timestamps, extract domains, and traverse deeply nested JSON trees directly inside any node input field.
 
-## 1. What are expressions?
+### 🎯 Key Outcomes of this Chapter:
+- Toggle node input fields between **Fixed** text and **Expression** mode.
+- Traverse objects, arrays, and lists using `$json` dot and bracket notation.
+- Access earlier canvas nodes deterministically using `$('Node Name').item.json`.
+- Utilize built-in n8n helpers like `.extractDomain()` and `$ifEmpty()`.
+- Format dates and calculate time differences using Luxon (`$now.toFormat()`).
+- Know the exact architectural threshold: when to use an Expression vs when to spin up a **Code Node**.
 
-Expressions are small pieces of logic used inside node fields. They can dynamically read input data, refer to other nodes, and transform values without requiring a separate Code node for every operation.
+---
 
-| Place | Best suited for |
-|---|---|
-| **Expression field** | A value or relatively small transformation inside a node field |
-| **Code node** | More involved custom logic, multi-step calculations, or multi-line code |
+# 1. What Are Expressions?
 
-Expressions use JavaScript syntax and can use n8n's built-in functions, workflow variables, and date/time helpers. The lesson also introduces JMESPath as a way of querying JSON data.
+Expressions allow you to calculate dynamic values directly inside node settings without writing external scripts.
 
-## 2. Switch a field to Expression mode
+```mermaid
+flowchart LR
+    A["Incoming JSON Object<br/>{ customerName: 'John Doe' }"] --> B["Node Field: Expression Mode<br/>{{ $json.customerName.toUpperCase() }}"]
+    B --> C["Evaluated Output<br/>'JOHN DOE'"]
 
-When configuring a field, n8n typically lets you choose between a fixed value and an expression.
+    style A fill:#4A90E2,stroke:#333,stroke-width:2px,color:#fff
+    style B fill:#F39C12,stroke:#333,stroke-width:2px,color:#fff
+    style C fill:#2ECC71,stroke:#333,stroke-width:2px,color:#fff
+```
 
-- **Fixed:** the value you enter stays the same for each item.
-- **Expression:** the value is calculated dynamically from available workflow data.
+| Context | When to Choose | Example |
+|---|---|---|
+| **Expression Field** | Inline string interpolation, math, date formatting, and field remapping. | `{{ $json.first_name + " " + $json.last_name }}` |
+| **Code Node** | Multi-line algorithms, looping over nested arrays, or external API parsing. | Complex JavaScript / Python scripts with state variables. |
 
-Expressions are commonly written inside double curly braces:
+---
+
+# 2. Fixed vs Expression Mode
+
+Every configurable property in an n8n node has a mode toggle:
+- **Fixed:** Static string (e.g. `support@company.com`) that never changes between executions.
+- **Expression (`FX`):** Dynamic JavaScript evaluated per item wrapped in double curly brackets `{{ ... }}`.
 
 ```text
 {{ $json.customerName }}
 ```
 
-Anything inside the braces is evaluated as an expression. Keep expression fields focused on returning the value needed by that field.
+> [!NOTE]
+> Anything outside the double curly braces `{{ ... }}` is treated as literal text. For example:
+> `Welcome {{ $json.name }}, your order ID is #{{ $json.orderId }}.`
 
-## 3. Read data from the current input item with `$json`
+---
 
-`$json` is a convenient way to access the JSON data of the current input item.
+# 3. Traversing Payloads with `$json`
 
-Suppose a node receives this item:
+Consider this nested customer payload:
 
 ```json
 {
@@ -61,225 +80,190 @@ Suppose a node receives this item:
 }
 ```
 
-### Read a top-level field
+```mermaid
+flowchart TD
+    ROOT["$json"] --> ON["orderNumber: 'ORD-1001'"]
+    ROOT --> CN["customerName: 'John Doe'"]
+    ROOT --> ORD["order (Object)"]
+    ORD --> PROD["products (Array)"]
+    PROD --> P0["[0] { name: 'V iPhone' }"]
+    PROD --> P1["[1] { name: 'Case' }"]
 
-```text
+    style ROOT fill:#34495E,stroke:#333,stroke-width:2px,color:#fff
+    style ORD fill:#4A90E2,stroke:#333,stroke-width:2px,color:#fff
+    style PROD fill:#9B59B6,stroke:#333,stroke-width:2px,color:#fff
+    style P0 fill:#2ECC71,stroke:#333,stroke-width:2px,color:#fff
+    style P1 fill:#2ECC71,stroke:#333,stroke-width:2px,color:#fff
+```
+
+### Access Examples:
+
+| Target Property | Dot Notation Syntax | Evaluated Output |
+|---|---|---|
+| Top-level String | `{{ $json.customerName }}` | `"John Doe"` |
+| Top-level Bracket | `{{ $json["email"] }}` | `"john@example.com"` |
+| Nested First Array Item | `{{ $json.order.products[0].name }}` | `"V iPhone"` |
+| Nested Second Array Item | `{{ $json.order.products[1].quantity }}` | `2` |
+
+> [!IMPORTANT]
+> Array indexing is zero-based: `[0]` accesses the first element, `[1]` accesses the second element.
+
+---
+
+# 4. Referencing Upstream Nodes
+
+While `$json` accesses the immediate incoming item, you can reach back to earlier nodes across your canvas using the `$('Node Name')` syntax:
+
+```javascript
+{{ $('Fetch Customer').item.json.email }}
+```
+
+Or when referencing an item paired by execution index:
+```javascript
+{{ $('Google Sheets').first().json.spreadsheetId }}
+```
+
+---
+
+# 5. Native n8n Helpers & String Methods
+
+n8n includes custom string and data manipulation helpers directly within the expression engine:
+
+### Extracting Email Domains:
+```javascript
+// Built-in n8n helper:
+{{ $json.email.extractDomain() }}  // Returns: "example.com"
+
+// Vanilla JavaScript split:
+{{ $json.email.split("@")[1] }}    // Returns: "example.com"
+```
+
+### Handling Missing Data with Fallbacks:
+Prevent downstream null-pointer errors with `$ifEmpty()`:
+```javascript
+{{ $ifEmpty($json.email, "no-reply@example.com") }}
+```
+Or standard JavaScript nullish coalescing:
+```javascript
+{{ $json.email ?? "no-reply@example.com" }}
+```
+
+---
+
+# 6. Date & Time Operations with Luxon
+
+n8n integrates Luxon natively. The global variables `$now` and `$today` provide rich date manipulation:
+
+### Date Formatting:
+```javascript
+// ISO Format:
+{{ $now.toFormat("yyyy-MM-dd") }}        // Output: "2026-10-19"
+
+// European Format:
+{{ $now.toFormat("dd-MM-yyyy HH:mm") }}   // Output: "19-10-2026 16:30"
+```
+
+### Date Differences (Time Elapsed):
+```javascript
+// Days elapsed since Jan 1st:
+{{ $now.diff(DateTime.fromISO("2026-01-01"), "days").days }}
+
+// Add 7 days to trial expiration:
+{{ $now.plus({ days: 7 }).toFormat("yyyy-MM-dd") }}
+```
+
+> [!WARNING]
+> In Luxon formatting strings, lowercase `dd` represents day of month (`01`-`31`), while uppercase `DD` represents day of year (`001`-`365`). Always verify the preview output in the expression editor!
+
+---
+
+# 7. Expression vs. Code Node Decision Matrix
+
+```mermaid
+flowchart TD
+    Q1{"Need to transform data?"} --> Q2{"Single field output?"}
+    Q2 -->|"Yes"| Q3{"Can a 1-line JS expression solve it?"}
+    Q3 -->|"Yes"| EXP["✅ Use Inline Expression<br/>{{ $json.name.trim() }}"]
+    Q3 -->|"No (Multi-step math)"| CD["⚡ Use Code Node (JS/Python)"]
+    Q2 -->|"No (Restructure array)"| CD
+
+    style EXP fill:#2ECC71,stroke:#333,stroke-width:2px,color:#fff
+    style CD fill:#9B59B6,stroke:#333,stroke-width:2px,color:#fff
+    style Q1 fill:#34495E,stroke:#333,stroke-width:2px,color:#fff
+    style Q2 fill:#F39C12,stroke:#333,stroke-width:2px,color:#fff
+    style Q3 fill:#E67E22,stroke:#333,stroke-width:2px,color:#fff
+```
+
+### Move to a Code Node When:
+- Writing multi-line logic or declaring intermediate `let` / `const` variables.
+- Using loops (`for`, `while`) or complex recursion.
+- Modifying binary file buffers or hashing cryptographic tokens.
+
+---
+
+# 8. Common Errors & Troubleshooting
+
+| Symptom | Root Cause | Solution |
+|---|---|---|
+| `[undefined]` output | Property name has typo or casing mismatch. | Check the source JSON panel for exact casing (`orderId` vs `OrderId`). |
+| `Cannot read properties of undefined (reading 'name')` | Attempted to access nested property on empty object. | Use optional chaining: `{{ $json.order?.products?.[0]?.name }}`. |
+| Expression renders literally (`{{ ... }}`) | The input field is in Fixed text mode. | Click the **FX** toggle to activate Expression mode. |
+| `SyntaxError: Unexpected token` | Multi-line statements or invalid brackets inside expression. | Keep expressions to single-line returns, or move logic to a **Code** node. |
+
+---
+
+# 9. Practice Exercises & Active Recall
+
+<details>
+<summary><strong>1. Write an expression to access the customerName property of the incoming item.</strong></summary>
+
+```javascript
 {{ $json.customerName }}
 ```
+</details>
 
-Result: `John Doe`
+<details>
+<summary><strong>2. How do you access the product name of the first item in order.products array?</strong></summary>
 
-### Use bracket notation
-
-```text
-{{ $json["email"] }}
-```
-
-Result: `john@example.com`
-
-Dot notation is convenient for ordinary property names. Bracket notation is useful when a key needs to be expressed as a string or has characters that make dot notation unsuitable.
-
-### Read a nested field in an array
-
-The `order` field contains an object, and `products` contains an array. Array indexes start at zero.
-
-```text
+```javascript
 {{ $json.order.products[0].name }}
 ```
+</details>
 
-Result: `V iPhone`
+<details>
+<summary><strong>3. What does $json.email.split("@")[1] return for test@company.com?</strong></summary>
 
-You can use bracket notation for the same path:
+It returns `"company.com"`.
+</details>
 
-```text
-{{ $json["order"]["products"][0]["name"] }}
+<details>
+<summary><strong>4. How do you provide a fallback value if $json.phoneNumber is empty?</strong></summary>
+
+```javascript
+{{ $ifEmpty($json.phoneNumber, "Not Provided") }}
+// Or:
+{{ $json.phoneNumber ?? "Not Provided" }}
 ```
+</details>
 
-**Remember:** `[0]` means the first item, `[1]` means the second item, and so on.
+<details>
+<summary><strong>5. When should you choose a Code node instead of an inline expression?</strong></summary>
 
-## 4. Read data from another node
+When your transformation requires multiple lines of code, variable declarations, complex array loops, custom regex algorithms, or multi-step error branching.
+</details>
 
-`$json` is used for the current input item. When you need output from a specifically named earlier node, reference that node by name. A common form is:
+---
 
-```text
-{{ $("Customer Data").item.json.email }}
-```
+# 10. Key Takeaways
 
-Replace `Customer Data` with the actual node name. The exact item-linking expression can depend on branches and item pairing, so use the expression editor's suggestions and preview to confirm the result.
+- Expressions allow dynamic data interpolation directly within node settings.
+- Use `$json` for the current item and `$('Node Name').item.json` for earlier canvas nodes.
+- Array indexing starts at index `0`.
+- Take advantage of Luxon (`$now`, `$today`) for reliable date arithmetic and formatting.
+- When expressions become multi-line and messy, refactor into a dedicated **Code Node**.
 
-## 5. Use built-in functions and JavaScript methods
+---
 
-Before adding a Code node, check whether an expression or built-in function can perform the transformation you need.
-
-### Extract a domain from an email address
-
-A built-in n8n string helper can extract the domain:
-
-```text
-{{ $json.email.extractDomain() }}
-```
-
-For `john@example.com`, the intended result is `example.com`.
-
-Another approach uses JavaScript's `split()` method:
-
-```text
-{{ $json.email.split("@")[1] }}
-```
-
-`split("@")` divides the string at the `@` symbol and returns an array. Index `[1]` selects the part after the symbol.
-
-The built-in helper is easier to read when it directly matches your use case. The `split()` approach illustrates how JavaScript string methods can be used inside expressions.
-
-### Check the available helpers
-
-n8n provides helpers for common operations, including:
-
-- **Strings:** extract domains, emails, URLs, or URL paths.
-- **Arrays:** operations such as chunking, compacting, differences, and averages where applicable.
-- **Numbers:** rounding helpers such as ceiling and floor, formatting, and even/odd checks.
-- **Booleans:** conversion helpers such as converting boolean values to integers.
-- **Objects:** checks such as whether an object or field is empty or present.
-- **Dates and times:** formatting, adding or subtracting time, and calculating differences.
-
-Available methods depend on the data type and n8n version. Consult the [official n8n built-in methods and variables documentation](https://docs.n8n.io/code/builtin/overview/) when choosing a helper.
-
-## 6. Provide a fallback when a value is empty
-
-Data from external systems may be missing or empty. A fallback expression can prevent a downstream field from receiving an unusable blank value.
-
-The lesson demonstrates n8n's `ifEmpty` helper:
-
-```text
-{{ $ifEmpty($json.email, "Email not found") }}
-```
-
-Conceptually:
-
-- If the email is present, return the email.
-- If the email is empty, return `Email not found`.
-
-Test this with both a populated email and an empty or missing email. A fallback text value is not the same as `null`; choose the result that makes sense for the next step.
-
-## 7. Work with dates and times
-
-Expressions can use n8n's date/time helpers, including `$now` and `$today`, and Luxon-style date operations.
-
-### Format the current date
-
-For year-month-day:
-
-```text
-{{ $now.toFormat("yyyy-MM-dd") }}
-```
-
-For day-month-year:
-
-```text
-{{ $now.toFormat("dd-MM-yyyy") }}
-```
-
-Date format tokens matter: lowercase `dd` represents the day of the month, while uppercase `DD` has a different meaning in Luxon-style formatting. Verify the preview.
-
-### Calculate days elapsed since the start of the year
-
-The basic idea is to calculate the difference between the current date and a date object representing the beginning of the year.
-
-```text
-{{ $now.diff(DateTime.fromISO("2026-01-01"), "days").days }}
-```
-
-Here `$now` represents the current date and time, `DateTime.fromISO(...)` creates a date object, and `diff(..., "days").days` reads the difference in days. Replace the year with the relevant year if you use a fixed start date. The numeric result may include a fractional day because the current time is part of the calculation.
-
-## 8. Expressions are not a substitute for every Code node
-
-Expressions are ideal for returning a value from a field, accessing data, formatting strings, using helper methods, and performing compact calculations.
-
-A Code node is a better fit when you need:
-
-- Multiple statements or multi-line logic.
-- A custom function with several steps.
-- Complex loops or branching calculations.
-- Processing that is difficult to express clearly in a single field.
-- Custom transformations not covered by available helpers.
-
-The lesson demonstrates a multi-line function inside an expression producing an invalid-syntax error. The key lesson is not to force a complex function into an expression field: move that logic to a Code node.
-
-### A practical decision rule
-
-```text
-Need one dynamic field value?
-          |
-          v
-Can a built-in helper or short expression do it?
-       /       \
-     Yes        No
-      |          |
- Use an       Use a Code node
- expression   for custom logic
-```
-
-## 9. Troubleshooting expressions
-
-### The expression returns `undefined` or an empty result
-
-- Check that the field exists in the input item.
-- Verify spelling and capitalization.
-- Inspect the input JSON in execution data.
-- Check whether the field is missing on some items.
-
-### Nested data returns the wrong value
-
-- Confirm the path through each object.
-- Remember that array indexes start at zero.
-- Check that the array contains the expected number of items.
-
-### A string method fails
-
-- Confirm that the input is a string rather than `null`, a number, or an object.
-- Add an appropriate fallback or convert the value carefully.
-- Preview the expression using realistic input data.
-
-### An expression gives a syntax error
-
-- Check matching parentheses, brackets, quotes, and curly braces.
-- Keep the expression concise.
-- Move multi-step custom logic to a Code node.
-
-### A reference to another node does not work
-
-- Verify the node name.
-- Confirm that the node has executed and has output data.
-- Check item linking and branches in the workflow.
-- Use the expression editor's data preview rather than guessing the path.
-
-## 10. Practice questions
-
-1. What is the main purpose of an expression in n8n?
-2. What is the difference between a fixed field value and an expression?
-3. Write an expression to read the `customerName` field from the current item.
-4. Given `order.products` as an array, how do you read the name of its first product?
-5. What does `split("@")[1]` return when applied to a normal email address?
-6. Why is a fallback value useful when the email field is empty?
-7. Which date helper can be used to format the current date?
-8. When should you choose a Code node instead of an expression?
-
-## 11. Answer key
-
-1. To dynamically access or transform data directly inside a node field.
-2. A fixed value stays the same; an expression calculates a value from workflow data or other available variables.
-3. `{{ $json.customerName }}`
-4. `{{ $json.order.products[0].name }}`
-5. The part after the `@` symbol, typically the email domain.
-6. It gives downstream steps a meaningful value instead of an empty field, when appropriate.
-7. `$now` can be formatted with a helper such as `.toFormat("yyyy-MM-dd")`.
-8. When the logic needs multiple statements, a custom function, complex processing, or is not clear as a short expression.
-
-## Key takeaways
-
-- Expressions bring dynamic, low-code data transformation into node fields.
-- Use `$json` for the current input item and a named-node reference when you need data from a specific earlier node.
-- Use array indexes carefully; the first item is index zero.
-- Prefer a built-in helper when it clearly solves the problem.
-- Test empty and unusual values, not only the happy path.
-- Use a Code node for complex or multi-line custom logic.
+<p align="center">
+  <b>Next Step:</b> Write bespoke JavaScript & Python algorithms in <a href="13_How_to_Use_Code_Node_in_n8n.md">Chapter 13: The Code Node</a> or return to the <a href="../README.md">Main Hub</a>.
+</p>

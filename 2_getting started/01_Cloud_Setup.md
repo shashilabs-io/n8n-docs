@@ -1,209 +1,208 @@
-# Setting Up n8n Cloud
-## A beginner-friendly guide to n8n Cloud vs self-hosting
+# ☁️ Setting Up n8n Cloud
 
-
-## 1. What this lesson is about
-
-This lesson begins the practical section of the course. It moves from understanding automation and comparing tools to getting ready to build workflows in n8n.
-
-Upcoming section will cover:
-- setting up n8n on a local machine or server;
-- registering for n8n Cloud;
-- understanding the n8n interface and workspace;
-- learning about nodes, triggers, workflow execution, branches, and activation;
-- building a workflow from scratch, one node at a time.
-
-
-
-## 2. The two main ways to use n8n
-
-### Option A — n8n Cloud
-
-n8n Cloud is the hosted option. You use it through a browser instead of installing and maintaining the application yourself.
-
-**Advantages**
-- Quick to start: open the website, register, and sign in.
-- No local installation or server setup is required.
-- Templates and integrations are available within the platform.
-- Suitable for beginners who want to start building workflows without managing infrastructure.
-
-**Trade-offs**
-- Free/trial access is limited, and ongoing use may require a paid plan.
-- You rely on the hosted service for your workspace, data, and workflow logic, so you have less infrastructure-level control than with a self-hosted setup.
-
-### Option B — Local or self-hosted n8n
-
-Local or self-hosted n8n are for people who are comfortable managing computers or servers and want more control over data and workflow logic.
-
-**Potential advantages**
-- More direct control over where the service runs and how it is configured.
-- Greater flexibility over the deployment environment.
-
-**Responsibilities**
-- You may need to manage installation, updates, security, backups, monitoring, and server capacity.
-- Self-hosting is not automatically more secure; the setup must be configured and maintained properly.
-
-
-## 3. Cloud vs self-hosting: comparison
-
-| Question | n8n Cloud | Local / self-hosted n8n |
-|---|---|---|
-| How do I start? | Register and sign in through a browser | Install and configure n8n on a machine or server |
-| Infrastructure management | Mostly handled by the hosted service | Your responsibility, or your hosting provider’s responsibility |
-| Beginner-friendliness | High for getting started quickly | Depends on technical comfort |
-| Control over deployment | Less direct control | More direct control |
-| Maintenance | Less server maintenance for you | Plan for updates, backups, security, and monitoring |
-| Best fit from the lesson | Beginners who want to start quickly | Technical users who want more control and flexibility |
-
-**Decision shortcut:** if your immediate goal is to learn workflow building with the least setup, start with Cloud. Consider self-hosting later if you need deployment control and are ready to maintain it.
+<p align="center">
+  <a href="../1_n8n_Introduction/04_vs_Make_Zapier_Beginner_Guide.md">⬅️ Prev: n8n vs Make vs Zapier</a> •
+  <a href="../README.md">Main Hub</a> •
+  <a href="02_Local_Installation_NPM.md">Next: Local NPM Setup ➡️</a> •
+  <a href="https://github.com/shashilabs-io/n8n-docs">GitHub Repository</a>
+</p>
 
 ---
 
-## 4. Step-by-step: signing up for n8n Cloud
+## 🧭 How to Use This Chapter
 
+> [!TIP]
+> **Practical Foundation:** This lesson marks the transition from conceptual automation theory to hands-on execution. You will compare the managed cloud experience with self-hosting, complete the cloud sign-up flow, and open your first workflow canvas.
 
-### Step 1 — Open the official website
-
-Open **[n8n.io](https://n8n.io/)** in your browser. 
-
-### Step 2 — Choose the free-start option
-
-On the website, choose the option to get started for free. Website labels and the sign-up flow may change.
-
-### Step 3 — Complete the registration form
-
-Fills in:
-- name;
-- a company email address;
-- a secure password;
-- a unique account/workspace name.
-
-The workspace name becomes part of the workspace URL. Choose a name carefully and avoid including private information.
-
-### Step 4 — Review the trial terms
-
-You will receive a **14-day trial** and no payment card was requested in that sign-up flow.This is not guarantee that the same offer or requirements are available to every user today. Check the current sign-up page before proceeding.
-
-### Step 5 — Answer onboarding questions
-
-Answers short questions about their team, company size, coding experience, and how they heard about n8n. These answers help complete the onboarding flow; use your own accurate answers.
-
-### Step 6 — Invite teammates or skip
-
-You sees an option to invite other team members and skips it for now. If you are learning alone, you can generally defer invitations when the interface offers a skip option.
-
-### Step 7 — Open the workspace
-
-After setup, open the new workspace. The workspace URL appears in the browser, and the n8n interface is ready to use.
-
-### Step 8 — Create a workflow
-
-Select **Create workflow**. The workflow canvas opens, and you can begin adding nodes. The next lessons are intended to explain the interface and node configuration in more detail.
+### 🎯 Key Outcomes of this Chapter:
+- Contrast **n8n Cloud** with **self-hosting** across maintenance, control, and setup time.
+- Walk through the **8-step registration process** on n8n Cloud.
+- Understand the core hierarchy: **Workspace &rarr; Workflow Canvas &rarr; Nodes**.
+- Follow an interactive setup checklist and avoid common onboarding pitfalls.
 
 ---
 
-## 5. Understanding three terms before building
+# 1. The Two Main Ways to Use n8n
 
-### Workspace
-The account area where your n8n work is organized. The workspace has its own URL.
+```mermaid
+flowchart TD
+    Start{"How do you want to run n8n?"}
+    
+    Start -- "Fastest start & Zero server setup" --> Cloud["☁️ Option A: n8n Cloud<br/>• Managed SaaS hosted by n8n<br/>• Immediate browser access<br/>• Automatic updates & backups"]
+    
+    Start -- "Full data privacy & Zero per-execution limits" --> SelfHosted["💻 Option B: Local / Self-Hosted<br/>• Runs on your machine or VPS (Docker / NPM)<br/>• Your data stays 100% on-premises<br/>• You manage updates & infrastructure"]
 
-### Workflow canvas
-The visual area where you assemble the steps of an automation by adding and connecting nodes.
-
-### Node
-A component in the workflow that performs a job, such as starting a workflow, checking information, transforming data, or taking an action. This lesson previews nodes but does not explain every node type in detail.
-
-### Basic mental model
-
-```text
-Sign up / sign in
-       |
-       v
-Open your workspace
-       |
-       v
-Create a workflow
-       |
-       v
-Workflow canvas
-       |
-       v
-Add and connect nodes
-       |
-       v
-Configure and test the workflow
+    style Start fill:#2C3E50,stroke:#333,stroke-width:2px,color:#fff
+    style Cloud fill:#4A90E2,stroke:#333,stroke-width:2px,color:#fff
+    style SelfHosted fill:#2ECC71,stroke:#333,stroke-width:2px,color:#fff
 ```
 
-The final configuration and testing steps are the natural next steps for building a workflow.
+### Option A — n8n Cloud
+n8n Cloud is the official hosted offering. You access and configure it entirely through a web browser without managing any backend infrastructure.
+
+- **Advantages:**
+  - **Zero Setup Time:** Open the website, register, and start automating in 2 minutes.
+  - **No Infrastructure Maintenance:** Backups, upgrades, and high availability are managed automatically.
+  - **Pre-configured Environment:** Built-in email dispatch and pre-configured environment credentials.
+  - **Ideal for Beginners:** Focus immediately on learning nodes, logic, and data flow.
+- **Trade-offs:**
+  - Free trial access is time-limited; long-term use requires an active subscription.
+  - Less direct control over low-level operating system packages compared to on-prem servers.
+
+### Option B — Local or Self-Hosted n8n
+Self-hosting is intended for developers, technical teams, and security-conscious organizations.
+
+- **Advantages:**
+  - **Total Data Sovereignty:** API keys, customer databases, and files never leave your VPC.
+  - **Uncapped Executions:** No monthly execution caps or per-workflow surcharges.
+  - **Custom Extensions:** Install custom npm packages or Python modules directly into your container.
+- **Responsibilities:**
+  - You are responsible for server provisioning, reverse proxies (SSL), backups, memory tuning, and version upgrades.
 
 ---
 
-## 6. Which option should you choose as a learner?
+# 2. Cloud vs Self-Hosting: Side-by-Side Comparison
 
-**Start with n8n Cloud if:**
-- you are new to workflow automation;
-- you want to focus on nodes, triggers, conditions, and workflow logic first.
+| Dimension | n8n Cloud | Local / Self-Hosted n8n |
+|---|---|---|
+| **Initial Setup** | Instant registration via browser | Install via `npx n8n` or Docker container |
+| **Infrastructure Management** | 100% handled by n8n team | Handled by you or your DevOps team |
+| **Beginner Friendliness** | **Highest** (No terminal required) | Moderate (Requires basic CLI / Docker comfort) |
+| **Data Residency & Privacy** | Stored on n8n Cloud servers | **100% Local / On-Premises** |
+| **Maintenance Burden** | Zero server maintenance | Requires managing updates, backups & security |
+| **Best Suited For** | Beginners & teams wanting zero ops | Engineers, privacy compliance & high volume |
 
-**Consider local/self-hosted n8n if:**
-- you are comfortable with command-line tools or server administration;
-- you need more control over the deployment environment;
-- you are willing to maintain updates, backups, security, and monitoring.
-
-You do not have to make a permanent choice on day one. Learn the interface and basic workflows first, then reassess based on your actual needs.
-
----
-
-## 7. Before you begin: checklist
-
-- [ ] I can access the official n8n website.
-- [ ] I have an email address that the current registration form accepts.
-- [ ] I can create and store a strong password safely.
-- [ ] I have reviewed the current trial and plan terms.
-- [ ] I have chosen a workspace name that does not reveal private information.
-- [ ] I have opened the workspace successfully.
-- [ ] I can find **Create workflow** and open the canvas.
-- [ ] I know whether I am using Cloud or a self-hosted instance.
+> [!NOTE]
+> **Decision Rule:** If your immediate goal is to learn workflow building with minimum friction, start with **n8n Cloud** (or quick local `npx n8n`). You can easily export workflows as JSON and import them into a self-hosted instance at any time!
 
 ---
 
-## 8. Troubleshooting notes
+# 3. Step-by-Step: Registering for n8n Cloud
 
-- **Registration option looks different:** follow the current official website; the interface may have changed.
-- **Email is rejected:** read the form’s current requirements and use an address that satisfies them.
-- **Workspace name is unavailable:** try a different unique name.
-- **Trial or payment terms differs :** trust the current terms shown by n8n.
-- **You cannot find Create workflow:** confirm that you are inside the workspace and signed in.
+```mermaid
+flowchart LR
+    A["1. Open n8n.io"] --> B["2. Sign Up Free"]
+    B --> C["3. Account Info"]
+    C --> D["4. Choose Workspace URL"]
+    D --> E["5. Open Canvas"]
+
+    style A fill:#4A90E2,stroke:#333,stroke-width:2px,color:#fff
+    style B fill:#FFAA00,stroke:#333,stroke-width:2px,color:#000
+    style C fill:#9B59B6,stroke:#333,stroke-width:2px,color:#fff
+    style D fill:#E67E22,stroke:#333,stroke-width:2px,color:#fff
+    style E fill:#2ECC71,stroke:#333,stroke-width:2px,color:#fff
+```
+
+### Step 1 — Open the Official Website
+Navigate to **[n8n.io](https://n8n.io/)** in your web browser.
+
+### Step 2 — Select the Free Start Option
+Click **Get started for free** or **Start free trial** on the homepage.
+
+### Step 3 — Complete Registration Details
+Fill in your registration details:
+- Full Name
+- Work or personal email
+- Secure password
+- Unique workspace/instance name
+
+> [!WARNING]
+> Your workspace name will become part of your public access URL (e.g. `yourname.app.n8n.cloud`). Choose a clean name and do not include confidential or sensitive company identifiers.
+
+### Step 4 — Review Trial Terms
+New sign-ups typically receive a **14-day free trial** without requiring upfront payment information. Always review the current terms displayed on the sign-up page.
+
+### Step 5 — Complete Onboarding Preferences
+Indicate your role, team size, and coding comfort level. These responses optimize your starter template recommendations.
+
+### Step 6 — Team Invites (Optional)
+You can invite collaborators or click **Skip** if you are learning independently.
+
+### Step 7 — Launch the Workspace
+Click **Go to workspace**. Your dedicated n8n instance will initialize and load into your browser.
+
+### Step 8 — Open the Canvas
+Click the **+ Create workflow** button. You are now inside the visual canvas and ready to add your first node.
 
 ---
 
-## 9. Active-recall quiz
+# 4. Three Core Concepts to Know Before Building
 
-Try answering before checking the key.
+```mermaid
+flowchart TD
+    W["🏢 Workspace<br/>(Your account URL & organization container)"] --> C["🎨 Workflow Canvas<br/>(The visual DAG assembly area)"]
+    C --> N["🧩 Nodes<br/>(Triggers, logic transforms & actions)"]
 
-1. What is the main benefit of n8n Cloud for a beginner?
-2. What are two trade-offs of using a hosted cloud workspace?
-3. Who might prefer a self-hosted setup?
-4. Why does the workspace name matter?
-5. Does the supplied transcript show a full local installation procedure?
-6. Why should you verify the trial details instead of assuming they have not changed?
+    style W fill:#34495E,stroke:#333,stroke-width:2px,color:#fff
+    style C fill:#2980B9,stroke:#333,stroke-width:2px,color:#fff
+    style N fill:#27AE60,stroke:#333,stroke-width:2px,color:#fff
+```
 
-### Answer key
-
-1. It allows you to start through a browser without installing or managing the application server.
-2. Trial/plan limits may apply, and you have less direct infrastructure-level control.
-3. Someone comfortable managing a machine or server who wants more deployment control and flexibility.
-4. It contributes to the workspace URL and identifies the workspace.
-5. No. The excerpt introduces local/self-hosted use but demonstrates Cloud registration.
-6. Trial availability, registration requirements, and plans can change over time.
+1. **Workspace:** The overarching administrative environment where your workflows, credentials, community templates, and execution histories are organized.
+2. **Workflow Canvas:** The infinite interactive grid where you visually connect nodes using drag-and-drop handles.
+3. **Node:** A modular step on the canvas responsible for listening for an event, altering data, or executing an external API call.
 
 ---
 
-## 10. Key takeaways
+# 5. Pre-Flight Cloud Setup Checklist
 
-- The lesson marks the shift from theory to hands-on n8n practice.
-- n8n Cloud is the quickest path in the lesson because it avoids local installation and server management.
-- Self-hosting offers more direct deployment control but comes with maintenance responsibilities.
-- The demonstrated sign-up journey is: official website → free-start option → registration details → onboarding questions → workspace → **Create workflow**.
-- The next lessons are expected to explain the interface, nodes, triggers, execution, branches, activation, and how to build a workflow from scratch.
+- [ ] Can access the official n8n website without network blocks.
+- [ ] Registered with a valid, accessible email address.
+- [ ] Created and securely stored a master password.
+- [ ] Picked a clean, non-confidential workspace name for your URL.
+- [ ] Completed sign-up and confirmed your email address.
+- [ ] Opened your workspace dashboard successfully.
+- [ ] Clicked **Create workflow** and verified that the blank canvas loads.
 
-**Study suggestion:** follow the sign-up steps in your own browser, then write down what you see on the canvas. Keep your own screenshots or notes so you can connect the next lesson’s terminology to the actual interface.
+---
+
+# 6. Common Setup Gotchas & Troubleshooting
+
+| Symptom | Likely Cause | Solution |
+|---|---|---|
+| **Registration page differs from video** | n8n frequently updates its UI and website flow. | Follow the current on-screen buttons; the underlying steps remain the same. |
+| **Email domain rejected** | Some free trial flows restrict disposable email providers. | Use a standard Gmail, Outlook, or corporate work email domain. |
+| **Workspace name unavailable** | The chosen subdomain is already claimed globally. | Append a unique identifier, city, or team acronym. |
+| **Canvas fails to load** | Browser extension (ad blocker or privacy shield) blocking WebSockets. | Temporarily disable aggressive script blockers for your `*.n8n.cloud` domain. |
+
+---
+
+# 7. Active Recall Quiz
+
+<details>
+<summary><strong>1. What is the single biggest benefit of n8n Cloud for a beginner?</strong></summary>
+
+It provides an instant browser-accessible canvas with zero server configuration, software installation, or DevOps maintenance.
+</details>
+
+<details>
+<summary><strong>2. What is one major reason an enterprise might choose self-hosted n8n over Cloud?</strong></summary>
+
+To maintain strict data sovereignty, ensuring that sensitive customer data, internal database queries, and private tokens never leave their internal network.
+</details>
+
+<details>
+<summary><strong>3. Why does your choice of workspace name matter during Cloud registration?</strong></summary>
+
+The workspace name directly forms your public subdomain URL (e.g. `companyname.app.n8n.cloud`), making it visible in webhook URLs and browser address bars.
+</details>
+
+<details>
+<summary><strong>4. If you start on n8n Cloud, are you locked into Cloud forever?</strong></summary>
+
+**No.** Workflows in n8n can be exported as simple JSON files with a single click and seamlessly imported into any self-hosted instance (or vice versa).
+</details>
+
+---
+
+# 8. Key Takeaways
+
+- You now know the functional differences between **n8n Cloud** and **Self-Hosted** deployments.
+- You have the steps required to register for n8n Cloud and reach the workflow canvas.
+- The fundamental hierarchy is **Workspace &rarr; Canvas &rarr; Nodes**.
+
+---
+
+<p align="center">
+  <b>Next Step:</b> Learn how to run n8n on your own machine in <a href="02_Local_Installation_NPM.md">Chapter 2: Local Installation via NPM</a> or jump directly to <a href="03_Interface.md">Chapter 3: Mastering the Interface</a>.
+</p>

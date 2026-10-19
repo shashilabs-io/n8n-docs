@@ -1,323 +1,228 @@
-# n8n Node Types Explained
-## A beginner-friendly guide to triggers, app/action nodes, core nodes, and cluster nodes
+# 🧩 n8n Node Types Explained
 
-### Learning objectives
-
-By the end of this chapter, you should be able to:
-
-- Explain what a node is and how nodes form a workflow.
-- Distinguish trigger nodes, app/action nodes, core nodes, and cluster nodes.
-- Build a simple workflow that starts with a manual trigger and retrieves rows from Google Sheets.
-- Recognize the main parts of a node’s configuration panel.
-- Inspect execution output, understand a data schema at a basic level, and use pinned data while testing.
+<p align="center">
+  <a href="03_Interface.md">⬅️ Prev: Mastering the Interface</a> •
+  <a href="../README.md">Main Hub</a> •
+  <a href="05_First_Workflow_Welcome_Email.md">Next: Your First Workflow ➡️</a> •
+  <a href="https://github.com/shashilabs-io/n8n-docs">GitHub Repository</a>
+</p>
 
 ---
 
-## 1. What is a node?
+## 🧭 How to Use This Chapter
 
-A **node** is a building block in an n8n workflow. Each node performs a particular job: starting a workflow, retrieving information, transforming data, applying logic, or sending information to another service.
+> [!TIP]
+> **Node Architecture:** Nodes are the foundational building blocks of every automation. Understanding the distinction between Triggers, App Nodes, Core Transform Nodes, and AI Cluster Nodes enables you to construct clean, modular, and resilient workflows without guessing.
 
-A workflow is a connected sequence of nodes. A common pattern is:
+### 🎯 Key Outcomes of this Chapter:
+- Master the **4 primary node categories** in n8n.
+- Build a hands-on data retrieval pipeline: **Manual Trigger &rarr; Google Sheets (Get Rows)**.
+- Navigate the **Node Configuration Panel** (Resource, Operation, Authentication, Settings).
+- Inspect execution data across **Table, JSON, and Schema** views.
+- Accelerate development by 10x using **Pinned Data** and test overrides.
 
-1. **Trigger** — decides when the workflow starts.
-2. **Processing** — prepares, checks, or transforms the data.
-3. **Action** — carries out a task, often in an external application.
+---
+
+# 1. What Is a Node?
+
+A **node** is a self-contained functional step in an n8n workflow. Each node receives incoming items, executes a specific operation (e.g. querying a database, calculating a formula, or dispatching an email), and emits the resulting output items to downstream nodes.
 
 ```mermaid
 flowchart LR
-    A["Trigger\nWhen should it start?"] --> B["Process\nWhat should happen to the data?"]
-    B --> C["Action\nWhat should be done?"]
+    A["🎯 1. Trigger<br/>When should it start?"] --> B["⚙️ 2. Processing<br/>What happens to data?"]
+    B --> C["🚀 3. Action<br/>What external task occurs?"]
+
+    style A fill:#FF6D5A,stroke:#333,stroke-width:2px,color:#fff
+    style B fill:#FFAA00,stroke:#333,stroke-width:2px,color:#000
+    style C fill:#2ECC71,stroke:#333,stroke-width:2px,color:#fff
 ```
 
-**Example:** When a customer submits a form, a workflow could receive the submission, check the information, and add the customer to a spreadsheet.
+$$\text{Trigger (The Event)} \longrightarrow \text{Process (Rules \& Filters)} \longrightarrow \text{Action (The Write / API Call)}$$
 
-The exact nodes depend on the task. Some workflows have only a few nodes; others have many branches and processing steps.
+---
 
-## 2. The four node categories
+# 2. The Four Node Categories
 
-The source lesson groups n8n nodes into four broad categories. These labels are useful for understanding their roles, although a node’s actual capabilities depend on the specific node and operation you choose.
+n8n organizes its vast node library into four distinct functional families:
 
-| Category | Main role | Typical examples |
+| Category | Primary Role | Concrete Examples |
 |---|---|---|
-| **Trigger nodes** | Start a workflow when an event occurs or a schedule/manual test starts it | Form submission, new email, schedule, manual trigger |
-| **App/action nodes** | Interact with an external application or service | Read or update Google Sheets, send a Slack message, send an email |
-| **Core nodes** | Perform general workflow logic or data operations without being primarily an integration with one external app | Filter or transform data, make a generic API request, apply logic |
-| **Cluster nodes** | Combine connected nodes into a grouped capability | AI Agent-style functionality and related AI components |
-
-The terms *app node* and *action node* can overlap in everyday explanations: an application integration may offer several operations, such as reading, creating, updating, or deleting records. In practice, focus on what the selected node operation does.
-
-### 2.1 Trigger nodes: deciding when to start
-
-A **trigger node** starts a workflow. Think of it as an alarm clock: it determines when the workflow should wake up and begin its work.
-
-Common examples include:
-
-- A new email arrives.
-- Someone submits a website form.
-- A new row appears in a spreadsheet.
-- A new message is received in a team chat.
-- A schedule reaches a configured time.
-- You manually start a test run.
-
-A manual trigger is particularly useful while learning because you choose when to run the workflow. It is different from an event-based trigger, which waits for a real event, or a schedule trigger, which runs according to a configured schedule.
-
-### 2.2 App/action nodes: interacting with services
-
-App/action nodes connect a workflow to an application or service. Depending on the selected operation, a node might:
-
-- Retrieve records from a spreadsheet.
-- Add or update a row.
-- Send an email.
-- Post a notification to a team channel.
-- Read or write information in a database.
-
-Choosing an application is only part of the setup. You usually also select an **operation**. For example, a Google Sheets integration may offer operations to retrieve rows, append rows, update rows, or work with a spreadsheet in another way.
-
-### 2.3 Core nodes: working with data and logic
-
-Core nodes help control the workflow or work with its data. Examples described in the source include filtering, setting or modifying values, code-based transformations, and generic API requests.
-
-A few useful concepts:
-
-- **Filter:** lets matching data continue according to a condition.
-- **Set/Edit Fields-style operation:** adds or changes fields in an item.
-- **Code:** allows custom transformation logic when built-in operations are insufficient.
-- **HTTP/API request:** communicates with a service through an API when an appropriate integration or operation is not being used.
-
-For example, a workflow could retrieve orders and then keep only orders whose total is greater than a chosen threshold. The condition and field names must match the actual data in your workflow.
-
-### 2.4 Cluster nodes: grouped capabilities
-
-A **cluster node** represents a group of connected components working together to provide a specific capability. AI-related functionality, such as an AI agent with connected tools or model components, is one example.
-
-For a first workflow, it is enough to recognize the category. Start by becoming comfortable with triggers, application integrations, and basic data operations before exploring more complex AI-oriented configurations.
-
-## 3. How to choose the right node
-
-Ask these questions in order:
-
-1. **What should start the workflow?** Choose a suitable trigger.
-2. **Where does the data come from?** Choose the application or source.
-3. **Does the data need checking or changing?** Add processing or logic nodes.
-4. **What final result do you want?** Choose the action that produces it.
+| **1. Trigger Nodes** | Initiates workflow execution upon a webhook, schedule, or event. | *Webhook*, *Schedule (Cron)*, *Stripe Trigger*, *Manual Trigger*. |
+| **2. App / Action Nodes** | Interacts directly with external third-party services. | *Google Sheets*, *Slack*, *Airtable*, *HubSpot*, *PostgreSQL*, *AWS S3*. |
+| **3. Core Logic Nodes** | Manipulates data structure, evaluates logic, or executes custom code. | *If / Switch*, *Filter*, *Set (Edit Fields)*, *Aggregate*, *Code (JS/Python)*. |
+| **4. Cluster Nodes** | Combines interconnected components into complex agentic behaviors. | *AI Agent*, *OpenAI Chat Model*, *Window Memory*, *Vector Store Tool*. |
 
 ```mermaid
 flowchart TD
-    A["Define the goal"] --> B{"What starts it?"}
-    B -->|Manual test| C["Manual Trigger"]
-    B -->|Time-based| D["Schedule Trigger"]
-    B -->|External event| E["Event Trigger"]
-    C --> F["Retrieve or receive data"]
-    D --> F
-    E --> F
-    F --> G{"Need to transform or check data?"}
-    G -->|Yes| H["Add processing / logic node"]
-    G -->|No| I["Choose final action"]
-    H --> I
-    I --> J["Test the workflow"]
+    N["🧩 n8n Node Ecosystem"]
+    N --> T["🎯 Trigger Nodes<br/>(Wakes up the flow)"]
+    N --> A["🔌 App Nodes<br/>(Reads/Writes to external apps)"]
+    N --> C["⚙️ Core Nodes<br/>(Logic, branching, code & HTTP)"]
+    N --> L["🤖 Cluster Nodes<br/>(AI Agents, Tools & LLMs)"]
+
+    style N fill:#34495E,stroke:#333,stroke-width:2px,color:#fff
+    style T fill:#FF6D5A,stroke:#333,stroke-width:2px,color:#fff
+    style A fill:#4A90E2,stroke:#333,stroke-width:2px,color:#fff
+    style C fill:#F39C12,stroke:#333,stroke-width:2px,color:#fff
+    style L fill:#9B59B6,stroke:#333,stroke-width:2px,color:#fff
 ```
 
-## 4. Build a first workflow: retrieve rows from Google Sheets
+---
 
-This example uses a **Manual Trigger** followed by a Google Sheets operation that retrieves rows. It is a learning workflow: the manual trigger lets you test the sequence on demand.
+# 3. Step-by-Step Anatomy: The 4 Categories in Depth
 
-### Workflow overview
+### 2.1 Trigger Nodes: Controlling Activation
+A trigger node determines *when* the canvas executes.
+- **Manual Trigger:** Initiates a run only when you click "Test workflow" (ideal for testing).
+- **Scheduled Trigger (Cron):** Fires automatically on time intervals (e.g. daily at 8:00 AM).
+- **Webhook Trigger:** Exposes an instant HTTP endpoint listening for real-time third-party pushes.
+- **App Event Trigger:** Polls or hooks into app events (e.g. `Gmail: On New Email Received`).
+
+### 2.2 App / Action Nodes: The Operation Pattern
+Selecting an application integration is only step one. You must always choose a specific **Resource** and **Operation**:
+- *App:* Google Sheets
+- *Resource:* Document / Sheet
+- *Operation:* `Append row`, `Get many rows`, `Update row`, or `Clear sheet`.
+
+### 2.3 Core Nodes: Data & Flow Control
+Core nodes process data without being tied to a single external proprietary service:
+- **Filter:** Discards items that fail a condition (e.g. `orderTotal > 100`).
+- **Edit Fields (Set):** Adds, modifies, renames, or strips JSON properties.
+- **Code Node:** Executes custom vanilla JavaScript or Python when pre-built UI nodes fall short.
+- **HTTP Request:** Connects to any arbitrary REST or GraphQL API.
+
+### 2.4 Cluster Nodes: AI & Agentic Systems
+Cluster nodes represent a paradigm shift in n8n. Rather than a linear pipe, sub-nodes plug directly into the root cluster:
+- An **AI Agent node** receives sub-connections for a **Language Model** (OpenAI/Anthropic), **Memory** (Window buffer), and **Tools** (Google Calendar search, Database query).
+
+---
+
+# 4. Hands-on Tutorial: Read Rows from Google Sheets
+
+Build your first functional data extraction pipeline:
 
 ```mermaid
 flowchart LR
-    A["Manual Trigger"] --> B["Google Sheets\nGet Rows"]
-    B --> C["Inspect returned items"]
+    A["🖱️ Manual Trigger<br/>(Test Execution)"] --> B["📊 Google Sheets Node<br/>(Operation: Get Rows)"]
+    B --> C["📋 Output Inspector<br/>(Table / JSON / Schema)"]
+
+    style A fill:#4A90E2,stroke:#333,stroke-width:2px,color:#fff
+    style B fill:#2ECC71,stroke:#333,stroke-width:2px,color:#fff
+    style C fill:#FFAA00,stroke:#333,stroke-width:2px,color:#000
 ```
 
-### Step 1 — Create a workflow
+1. **Add Manual Trigger:** Click `+` on the canvas and choose **Manual Trigger**.
+2. **Add Google Sheets:** Connect a wire to a new **Google Sheets** node.
+3. **Configure Operation:** Set Resource to *Document* and Operation to *Get Rows*.
+4. **Authenticate:** Select or connect your Google OAuth2 credentials.
+5. **Select Spreadsheet:** Pick your target Google Sheet and specific Tab name.
+6. **Execute:** Click **Test step**.
+7. **Inspect the Data:** Observe the returned array of row objects in the right-hand panel!
 
-Open your n8n workspace and create a new workflow. Give it a descriptive name, such as **Read Orders from Google Sheets**.
+---
 
-### Step 2 — Add a Manual Trigger
+# 5. The Node Configuration Panel & Output Views
 
-Add a Manual Trigger as the first node. When you use the workflow’s test control, this node starts the test execution.
-
-A manual trigger is useful for learning and debugging. For a workflow that must run automatically in production, choose a trigger appropriate to the real requirement.
-
-### Step 3 — Add the Google Sheets node
-
-Use the plus button after the trigger and search for **Google Sheets**. Select the integration, then choose the operation that retrieves rows from a sheet. The exact labels may vary across n8n versions.
-
-### Step 4 — Connect credentials
-
-Select an existing Google Sheets credential or create a new one. If creating a credential, follow the authorization flow and review the permissions being requested before granting access.
-
-Credentials allow n8n to authenticate with the external service. Do not paste secret tokens or passwords into ordinary workflow fields, and do not share credential details in screenshots.
-
-### Step 5 — Select the spreadsheet and sheet
-
-Configure the node by selecting:
-
-- The spreadsheet/document containing the data.
-- The specific sheet or tab inside that document.
-- Any optional filters needed to limit which rows are retrieved.
-
-For the first test, use a sample spreadsheet you control and leave filters unset if you want to retrieve the available rows.
-
-### Step 6 — Test the node
-
-Run the node or test the workflow. If the connection and configuration are correct, the node should return the rows available to it.
-
-Do not assume the output will always contain a particular number of rows. The result depends on the spreadsheet contents, permissions, selected operation, filters, and current configuration.
-
-### Step 7 — Inspect the output
-
-The node output area can help you understand what happened. Depending on the interface and node, you may be able to inspect data in table, JSON, or schema views.
-
-| View | What it helps you understand |
-|---|---|
-| **Table** | Records arranged in rows and columns |
-| **JSON** | The structured data passed between nodes |
-| **Schema** | The fields the output contains and the general shape of the data |
-
-A **schema** describes the structure of the data. For example, an order record might contain an order ID, customer name, email address, status, and order date. Your actual fields depend on the spreadsheet.
-
-## 5. Understand the node configuration panel
-
-When you open a node, its configuration panel lets you choose credentials, resources, operations, and other parameters.
+When you double-click any node, its configuration modal opens:
 
 ```mermaid
-flowchart TB
-    A["Previous node output"] --> B["Node configuration"]
-    B --> C["Selected operation"]
-    C --> D["Node executes"]
-    D --> E["Output data"]
-    E --> F["Next connected node"]
+flowchart LR
+    In["📥 Input Data<br/>(From Previous Node)"] --> Config["⚙️ Node Parameters<br/>(Credentials, Resource, Operation)"]
+    Config --> Out["📤 Output Data<br/>(Table / JSON / Schema Views)"]
+
+    style In fill:#3498DB,stroke:#333,stroke-width:1px,color:#fff
+    style Config fill:#F39C12,stroke:#333,stroke-width:2px,color:#fff
+    style Out fill:#2ECC71,stroke:#333,stroke-width:1px,color:#fff
 ```
 
-Think of the node as a small unit of work:
+### 👁️ The 3 Output Views
 
-- **Input:** data received from the previous node, if any.
-- **Configuration:** the operation and options you selected.
-- **Execution:** n8n performs the configured operation.
-- **Output:** the result that can be passed to the next node.
-
-A node that retrieves information may not require meaningful input from the previous node. A node that updates a record may depend on fields received from earlier nodes.
-
-### Rename nodes clearly
-
-A descriptive node name makes a workflow easier to read. For example, rename a generic Google Sheets node to **Get Orders Data**. The name should explain the node’s purpose, not merely repeat the application name.
-
-### Settings you may encounter
-
-The source lesson introduces settings such as:
-
-- **Always Output Data:** controls whether a node can provide output even when its normal result is empty; understand the exact behavior shown in your current n8n version.
-- **Execute Once:** changes how often the node operation runs in relation to incoming items.
-- **Retry On Fail:** configures retry behavior when execution fails.
-- **On Error:** determines how execution should proceed when the node encounters an error, where supported.
-
-These settings affect workflow behavior. Do not enable them automatically; choose them according to the problem you are solving. Their exact labels and available options can vary by version and node.
-
-## 6. Test data, edit output, and pin data
-
-Testing is easier when you can inspect the output of each node instead of running the entire workflow blindly.
-
-### Inspect and paginate results
-
-If a node returns many items, the output viewer may let you change the page size and move through the records. This is a display feature; it does not necessarily change how many records the node retrieved.
-
-### Edit output for testing
-
-Some n8n testing interfaces let you edit or mock node output. This can help you test how later nodes behave with a particular input. Treat edited output as test data, not as proof that the original external system contains those values.
-
-### Pin data
-
-**Pinned data** lets you reuse a captured node output during subsequent tests, rather than fetching the same data again each time. It can save time when testing downstream nodes.
-
-Use pinned data thoughtfully:
-
-- It represents a saved test output, which may become stale if the source data changes.
-- A workflow tested with pinned data may behave differently when it runs with fresh data.
-- Before relying on a workflow, test the relevant path with realistic, current input and verify the final result.
-
-## 7. A complete mental model
-
-```mermaid
-mindmap
-  root((n8n Nodes))
-    Trigger
-      Manual
-      Schedule
-      Event
-    App / Action
-      Read data
-      Create or update data
-      Send notification
-    Core
-      Filter
-      Transform
-      Logic
-      API request
-    Cluster
-      Grouped capability
-      AI-oriented components
-    Testing
-      Inspect output
-      Table / JSON / Schema
-      Edit test data
-      Pin data
-```
-
-A reliable beginner workflow usually follows this mental model:
-
-**Start → Retrieve → Process → Act → Verify**
-
-Not every workflow needs every stage. The important thing is to identify the trigger, understand the data moving between nodes, configure each operation, and test the result.
-
-## 8. Common beginner mistakes
-
-| Mistake | Why it causes trouble | Better approach |
+| View Mode | What It Shows | Best Used For |
 |---|---|---|
-| Choosing an action before deciding how the workflow starts | The workflow may not run when expected | Decide the trigger first |
-| Selecting an app but not the right operation | The node may perform a different task than intended | Read the operation name carefully |
-| Forgetting credentials or permissions | The external service may reject the request | Verify the account connection and required access |
-| Assuming output fields without inspecting data | Later nodes may reference fields that do not exist | Inspect table, JSON, or schema output |
-| Renaming every node with generic labels | The workflow becomes hard to understand | Use purpose-based names |
-| Treating pinned data as live data | Tests may pass with outdated examples | Re-test with fresh input before production use |
-| Ignoring error settings | A failed node may stop or alter the workflow unexpectedly | Decide how failures should be handled |
+| **Table View** | Clean spreadsheet-like grid with columns and rows. | Rapid human inspection of tabular data. |
+| **JSON View** | Raw array of JSON objects (`[{ "json": {...} }]`). | Debugging nested structures, data types, and syntax. |
+| **Schema View** | Summary of property keys, data types (string, number, boolean). | Verifying data contracts before mapping downstream nodes. |
 
-## 9. Practice exercise
+---
 
-Create a workflow with a Manual Trigger and a Google Sheets node that retrieves rows from a sample spreadsheet.
+# 6. Advanced Node Settings You Must Know
 
-Checklist:
+Inside every node's **Settings tab**, four critical execution switches exist:
 
-- [ ] Create and name a workflow.
-- [ ] Add a Manual Trigger.
-- [ ] Add the Google Sheets integration.
-- [ ] Connect a credential and select a spreadsheet and sheet.
-- [ ] Test the node.
-- [ ] Inspect the returned output.
-- [ ] Rename the node to describe its purpose.
-- [ ] Try pinning test output, then consider what might change if the spreadsheet changes.
+| Setting | Functionality | Production Recommendation |
+|---|---|---|
+| **Always Output Data** | Emits an empty item `{}` even if 0 records were found. | Enable when downstream nodes must run regardless of query results. |
+| **Execute Once** | Executes the node only once for the entire batch, instead of once per item. | Enable for bulk notifications (e.g. send one Slack message for 50 records). |
+| **Retry On Fail** | Automatically re-attempts execution up to 5 times with backoff. | **Always enable** for volatile external HTTP APIs and rate-limited endpoints. |
+| **On Error** | Determines behavior on exception (`Stop Workflow`, `Continue`, or `Route to Error Branch`). | Choose `Continue (Using Error Output)` for resilient batch pipelines. |
 
-### Knowledge check
+---
 
-1. What is the main responsibility of a trigger node?
-2. What is the difference between selecting an application and selecting an operation?
-3. What does a schema tell you about output data?
-4. Why can pinned data speed up testing?
-5. Why should pinned data not be treated as a guarantee of live production behavior?
+# 7. Pinning Data: 10x Faster Development
 
-**Answers**
+> [!TIP]
+> **What is Pinning?**
+> Clicking the **Pin Data** icon on a node freezes its output data inside the canvas.
+> 
+> In subsequent tests, downstream nodes read this frozen payload instantly **without making real API calls to Google Sheets, Stripe, or Gmail again**.
 
-1. It determines when the workflow starts.
-2. The application identifies the integration; the operation specifies the task to perform through it.
-3. It describes the structure and fields of the data.
-4. It allows captured output to be reused while testing downstream nodes.
-5. It may be stale or differ from fresh input, so the workflow should be tested with realistic current data.
+### Rules for Safe Pinning:
+1. Pin data during layout, field mapping, and expression writing.
+2. Unpin data before final production deployment to ensure live dynamic payloads flow properly.
 
-## Chapter summary
+---
 
-- Nodes are the building blocks of n8n workflows.
-- Trigger nodes start workflows; app/action nodes interact with services; core nodes handle general logic and data work; cluster nodes group components into a capability.
-- A practical first workflow is **Manual Trigger → Google Sheets: Get Rows**.
-- Credentials, resource selection, operation selection, and node settings determine how an integration behaves.
-- Output views help you inspect returned records and understand their schema.
-- Editing or pinning output is useful for testing, but fresh data should be used to verify real workflow behavior.
+# 8. Common Beginner Traps & How to Avoid Them
+
+| Mistake | Consequence | Professional Fix |
+|---|---|---|
+| **Selecting App, but wrong Operation** | Node executes an unexpected action (e.g. `Append` instead of `Update`). | Double check the *Operation* dropdown carefully. |
+| **Generic Node Names** | Workflow becomes unreadable with 10 nodes called `Google Sheets`. | Rename nodes to their explicit job: `Fetch Unpaid Invoices`. |
+| **Ignoring Data Types** | A string `"100"` fails a numerical comparison `> 50`. | Use expressions with type casting: `{{ Number($json.price) > 50 }}`. |
+| **Testing with Pinned Stale Data** | Workflow works in tests but fails in production because schema changed. | Always run a final end-to-end unpinned test with live inputs. |
+
+---
+
+# 9. Active Recall Quiz
+
+<details>
+<summary><strong>1. What are the four broad categories of nodes in n8n?</strong></summary>
+
+1. **Trigger Nodes** (Start the workflow).
+2. **App / Action Nodes** (Interact with external services).
+3. **Core Nodes** (Logic, branching, data transforms, and HTTP).
+4. **Cluster Nodes** (AI agents, LLM memory, and tool bindings).
+</details>
+
+<details>
+<summary><strong>2. What is the difference between an Application and an Operation?</strong></summary>
+
+The **Application** identifies the service being contacted (e.g. Google Sheets), while the **Operation** specifies the exact task performed (e.g. *Get Rows*, *Append Row*, *Delete Row*).
+</details>
+
+<details>
+<summary><strong>3. What does "Pinning Data" do inside the node output panel?</strong></summary>
+
+It freezes the current test output payload in memory so you can build and test downstream nodes instantly without re-fetching data from external APIs.
+</details>
+
+<details>
+<summary><strong>4. When should you toggle the "Execute Once" setting on a node?</strong></summary>
+
+When a node receives multiple items (e.g. 20 customers) but you want the action to execute only **one time** (e.g. sending a single summary Slack alert rather than 20 individual messages).
+</details>
+
+---
+
+# 10. Key Takeaways
+
+- Workflows are built from **Trigger**, **Transform**, and **Action** nodes.
+- Always configure the specific **Operation** and inspect data across **Table, JSON, and Schema** views.
+- Leverage **Pin Data** to speed up canvas development safely.
+- Use descriptive node naming to make workflows self-documenting.
+
+---
+
+<p align="center">
+  <b>Next Step:</b> Build an end-to-end automated email pipeline in <a href="05_First_Workflow_Welcome_Email.md">Chapter 5: Your First Workflow (Welcome Email)</a> or return to the <a href="../README.md">Main Hub</a>.
+</p>

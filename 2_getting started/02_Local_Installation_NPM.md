@@ -1,236 +1,232 @@
-# Installing n8n Locally with npm
-## A beginner-friendly guide to local development and self-hosting options
+# 💻 Installing n8n Locally with npm
 
-
-## 1. What this lesson teaches
-
-The previous lesson introduced n8n Cloud. This lesson introduces running n8n on your own computer and explains the trade-off: you gain more direct control, but you also take on installation and maintenance responsibilities.
-
-We have three options:
-1. **Docker image** — presented as a good option for production-style deployment, including cloud servers.
-2. **NPM / Node.js installation** — demonstrated on a local developer machine for learning, testing, and custom integrations.
-3. **Desktop app** — It is no longer officially supported, so it is not covered in the walkthrough.
-
-The actual step-by-step demonstration  uses **NPM on a local machine**.
+<p align="center">
+  <a href="01_Cloud_Setup.md">⬅️ Prev: Cloud Setup</a> •
+  <a href="../README.md">Main Hub</a> •
+  <a href="03_Interface.md">Next: Mastering the Interface ➡️</a> •
+  <a href="https://github.com/shashilabs-io/n8n-docs">GitHub Repository</a>
+</p>
 
 ---
 
-## 2. Cloud vs local installation: the trade-off
+## 🧭 How to Use This Chapter
 
-| Topic | n8n Cloud | Local NPM setup |
-|---|---|---|
-| Who manages the runtime? | The hosted service manages the platform infrastructure | You manage the local installation and environment |
-| Getting started | Browser-based sign-up | Install Node.js, then install and start n8n |
-| Main advantage | Simpler setup and less maintenance | More direct control for development and testing |
-| Main responsibility | Work within hosted plan and service limits | Handle updates, local availability, configuration, and security |
-| Best use in the lesson | Beginners who want to learn quickly | Developers who want to test or customize workflows locally |
+> [!TIP]
+> **Developer Setup:** This guide covers installing and running n8n on your own local development workstation using Node.js and `npm`. You will gain complete environmental control, unmetered execution quotas, and offline-friendly workflow testing.
 
-**Important:** a local development instance is not automatically production-ready. If workflows are business-critical, you need a properly managed server setup, secure configuration, backups, monitoring, and a plan for uptime.
+### 🎯 Key Outcomes of this Chapter:
+- Understand the trade-offs between **Cloud**, **Local NPM**, and **Docker** deployments.
+- Verify your local environment (**Node.js** and **npm**).
+- Execute the global installation and launch the local engine on `localhost:5678`.
+- Complete the initial local Owner account setup.
+- Learn version management, upgrade practices, and production security precautions.
 
 ---
 
-## 3. What you need before starting
+# 1. Deployment Models: Cloud vs Local NPM vs Docker
 
- NPM method requires **Node.js**. Make sure NPM (Node Package Manager) is installed alongside Node.js.
+```mermaid
+flowchart TD
+    Choice{"Where will you run n8n?"}
+    
+    Choice -- "Zero Setup / Learning" --> Cloud["☁️ n8n Cloud<br/>• Managed SaaS<br/>• Instant setup<br/>• Zero maintenance"]
+    Choice -- "Local Dev / Prototyping" --> NPM["💻 Local NPM<br/>• Requires Node.js<br/>• Great for offline testing<br/>• Free unmetered executions"]
+    Choice -- "Production / Cloud VPS" --> Docker["🐳 Docker Container<br/>• Production isolated container<br/>• Auto-restart policies<br/>• Easily scaled with Redis"]
 
-You should have:
-- permission to install software on your computer;
-- a terminal or command-line application;
-- internet access to download Node.js and the n8n package;
-- a Node.js version supported by the current n8n documentation.
+    style Choice fill:#2C3E50,stroke:#333,stroke-width:2px,color:#fff
+    style Cloud fill:#4A90E2,stroke:#333,stroke-width:2px,color:#fff
+    style NPM fill:#F39C12,stroke:#333,stroke-width:2px,color:#fff
+    style Docker fill:#2ECC71,stroke:#333,stroke-width:2px,color:#fff
+```
 
+### ⚖️ Trade-Off Summary
 
-## 4. Step-by-step: install n8n using NPM
+| Dimension | n8n Cloud | Local NPM Setup | Production Docker |
+|---|---|---|---|
+| **Runtime Management** | Hosted service manages infrastructure | You manage your machine's Node.js runtime | Container engine manages isolated runtime |
+| **Prerequisites** | Modern web browser | Node.js (v18+) & npm | Docker Engine / Docker Compose |
+| **Execution Limits** | Subject to plan tier quotas | **100% Unmetered & Free** | **100% Unmetered & Free** |
+| **Security Responsibility** | Managed by n8n security team | Local machine user permissions | Container isolation, reverse proxy, SSL |
+| **Best Used For** | Beginners & zero-ops teams | **Prototyping, testing & offline work** | **24/7 Production workflows & VPS** |
 
-### Step 1 — Open the official n8n documentation
+> [!WARNING]
+> **Local Dev &ne; 24/7 Production:**
+> Running `n8n start` on your laptop is fantastic for building and testing workflows. However, if your computer sleeps, restarts, or loses power, scheduled triggers will pause. For mission-critical 24/7 production, deploy using Docker on a virtual private server (VPS).
 
-Go to the official n8n documentation and open its self-hosting/installation section. Choose the NPM installation instructions and follow the current guide.
+---
 
-Official documentation: [n8n installation overview](https://docs.n8n.io/hosting/installation/)
+# 2. Prerequisites & Verification
 
-### Step 2 — Install Node.js
+Before installing, ensure your environment meets the minimum requirements:
+1. **Operating System:** Windows (PowerShell/WSL), macOS, or Linux.
+2. **Node.js:** Active LTS version (Node.js 18.x or 20.x recommended).
+3. **NPM:** Distributed automatically with Node.js.
 
-Install the Node.js from its official Site. NPM is installed with it.
-
-
-### Step 3 — Verify Node.js and npm
-
-Open Terminal on macOS/Linux or a terminal such as PowerShell on Windows, then run:
+### Check Current Installed Versions:
+Open your terminal (PowerShell, Terminal, or Bash) and execute:
 
 ```bash
 node -v
 npm -v
 ```
 
-These commands print the installed versions. If the terminal says a command is not recognized, confirm the installation completed and reopen the terminal.
+If version numbers print (e.g. `v20.11.0` and `10.2.4`), your system is ready. If not, download and install the LTS release from [nodejs.org](https://nodejs.org/).
 
-### Step 4 — Install n8n globally
+---
 
-Run a global NPM installation command:
+# 3. Step-by-Step Installation Walkthrough
+
+```mermaid
+flowchart LR
+    A["1. Install Node.js"] --> B["2. Verify CLI Tools"]
+    B --> C["3. npm install -g n8n"]
+    C --> D["4. n8n start"]
+    D --> E["5. Open localhost:5678"]
+
+    style A fill:#4A90E2,stroke:#333,stroke-width:2px,color:#fff
+    style B fill:#FFAA00,stroke:#333,stroke-width:2px,color:#000
+    style C fill:#9B59B6,stroke:#333,stroke-width:2px,color:#fff
+    style D fill:#E67E22,stroke:#333,stroke-width:2px,color:#fff
+    style E fill:#2ECC71,stroke:#333,stroke-width:2px,color:#fff
+```
+
+### Step 1 — Install n8n Globally via npm
+Run the global installation command in your terminal:
 
 ```bash
 npm install -g n8n
 ```
 
-The `-g` option requests a global installation, so the `n8n` command can be run from the terminal. Global installation permissions and command behaviour can differ by operating system and Node.js setup.
+*(On macOS or Linux, if you encounter `EACCES` permission errors, configure an npm user directory or run with standard non-root directory permissions).*
 
-### Step 5 — Start n8n
+> [!TIP]
+> **Want to test without installing globally?**
+> You can launch a temporary one-off instance using `npx`:
+> ```bash
+> npx n8n
+> ```
 
-After the installation completes, run:
+### Step 2 — Start the n8n Server
+Once installation completes, launch the daemon:
 
 ```bash
 n8n start
 ```
 
-Access n8n in a browser at:
-
+Your terminal will initialize the SQLite database (stored in `~/.n8n/`) and display:
 ```text
+Editor is now accessible via:
 http://localhost:5678
 ```
 
-`localhost` means your own computer.
+### Step 3 — Open the Web Interface
+Open your web browser and navigate to:
+👉 **`http://localhost:5678`**
 
-### Step 6 — Create the local owner account
+### Step 4 — Create the Local Owner Account
+On your first visit, n8n prompts you to establish the primary **Instance Owner**:
+- Enter your name, admin email, and a secure password.
+- Complete the quick onboarding questionnaire.
 
-On the first visit, You will see an initial setup form and enters a name, email, and password. The form also asks onboarding questions about the organization and intended use.
-
-Use a strong password and keep it safe. The form and available options may look different in a newer n8n version.
-
-### Step 7 — Optional: request and activate the free license key shown in the lesson
-
-You can enter a free license key by email and entering it through the instance’s settings. This unlocks certain features in that version, such as workflow history and additional debugging/search features.
-
-
-### Step 8 — Keep the terminal process running
-
-For a local instance, Keep the terminal process running to run n8n. If you stop that process or shut down the computer, the local service may become unavailable. This is one reason a local learning setup differs from a managed production deployment.
+> [!IMPORTANT]
+> Keep your terminal window open! If you close the terminal or press `Ctrl + C`, the local n8n server process terminates immediately.
 
 ---
 
-## 5. Commands at a glance
+# 4. Essential CLI Command Reference
 
-| Command | Purpose |
+| Command | Action |
 |---|---|
-| `node -v` | Display the installed Node.js version |
-| `npm -v` | Display the installed npm version |
-| `npm install -g n8n` | Install n8n globally through npm, as shown in the lesson |
-| `n8n start` | Start the local n8n service, as shown in the lesson |
-| `npx n8n` | The transcript mentions this as a way to try n8n without doing the global installation |
-
- `npx n8n` can be used to try n8n without installing it globally. Check the current official documentation for the recommended command and behaviour for your version.
-
----
-
-## 6. Updating or choosing an n8n version
-
-- **Update to the latest stable release:** See in the Example > a global npm update command.
-- **Install a specific version:** a version can be appended to the package name using `@version`.
-- **Try a prerelease (`next`) version:** this is a way to test newer features, with less stability assurance than a stable release.
-
-Examples:
-
-```bash
-npm update -g n8n
-```
-
-```bash
-npm install -g n8n@VERSION
-```
-
-Replace `VERSION` with the exact version you intend to install.
-
-**Before upgrading:** read the current release notes, back up any important workflows and data, and verify the upgrade method in the official documentation.
+| `node -v` | Prints installed Node.js runtime version. |
+| `npm -v` | Prints installed npm package manager version. |
+| `npm install -g n8n` | Globally installs the latest stable release of n8n. |
+| `npx n8n` | Runs n8n temporarily without permanent global installation. |
+| `n8n start` | Boots the local workflow engine and web server. |
+| `npm update -g n8n` | Upgrades global n8n installation to the newest stable release. |
+| `npm install -g n8n@1.70.0` | Installs a pinned, specific version of n8n. |
 
 ---
 
-## 7. Docker vs NPM: 
+# 5. Version Upgrades & Maintenance
 
-### Docker image
-
-Docker is a better fit for production-style deployment, including cloud servers such as AWS, Google Cloud, Azure, or DigitalOcean. Containers help package an application and isolate it from other software on the host. 
-
-### NPM on a developer machine
-
-Use NPM to run n8n locally for development and testing. This can be useful when experimenting with workflows or custom integrations before moving them to a managed server environment.
-
-### A practical learning path
-
-```text
-Learn the interface on n8n Cloud
-             |
-             v
-Practice workflow logic
-             |
-             v
-Try local NPM installation (optional)
-             |
-             v
-Plan a proper server deployment if needed
-```
-
-
-
-## 8. Common beginner issues
-
-These checks are general troubleshooting guidance:
-
-- **`node` or `npm` is not recognized:** verify Node.js installed correctly, then reopen the terminal.
-- **Global installation fails due to permissions:** check your operating system’s Node.js/npm installation guidance; avoid changing permissions blindly.
-- **The browser does not open automatically:** try navigating to `http://localhost:5678` while the n8n process is running.
-- **Port 5678 is already in use:** another process may be using the port. Read the terminal error and consult the current n8n documentation before changing configuration.
-- **The local page stops responding:** check whether the terminal process is still running.
-- **A command differs from the video:** use the current official installation documentation because commands and supported versions can change.
+When upgrading n8n:
+1. **Stop the running instance:** Press `Ctrl + C` in your terminal.
+2. **Back up your database:** Copy your SQLite file located at `~/.n8n/database.sqlite` (or export your workflows via the UI).
+3. **Run the update command:**
+   ```bash
+   npm update -g n8n
+   ```
+4. **Restart n8n:**
+   ```bash
+   n8n start
+   ```
 
 ---
 
-## 9. Security and production reminders
+# 6. Common Local Troubleshooting Scenarios
 
-A local development installation is intended for learning and testing—not automatically for exposing workflows to the public internet.
-
-Before running important or public-facing automations:
-- keep n8n and dependencies updated;
-- protect the owner account and credentials;
-- avoid exposing the local port directly to the internet;
-- plan backups and recovery;
-- monitor failures and resource usage;
-- use a deployment approach suited to your availability and security needs.
-
-The lesson’s central trade-off is that self-hosting can reduce dependence on a hosted subscription, but the work of operating the instance becomes yours.
+| Issue | Cause | Solution |
+|---|---|---|
+| **`command not found: n8n`** | Global npm bin directory is missing from your system `PATH`. | Reopen your terminal or add the npm global prefix to your system environment variables. |
+| **`EACCES: permission denied`** | Insufficient write permissions in global `node_modules`. | Configure npm to use a directory in your home folder or use a Node version manager like `nvm`. |
+| **`Port 5678 already in use`** | A previously launched n8n instance or other daemon is bound to port 5678. | Kill the existing process or launch on a different port: `PORT=5679 n8n start`. |
+| **Browser displays "Connection Refused"** | The terminal process crashed or was terminated. | Return to terminal, check logs, and run `n8n start` again. |
 
 ---
 
-## 10. Active-recall quiz
+# 7. Production & Security Best Practices
 
-Try answering before checking the key.
-
-1. What is the difference between NPM and Node.js?
-2. What does `node -v` show?
-3. What does the `-g` option mean in the installation command shown?
-4. What address does the lesson use to open the local instance?
-5. Why is a local development setup not automatically production-ready?
-6. What is the difference between installing a stable version and a prerelease?
-7. Why does self-hosting involve more responsibility than n8n Cloud?
-8. Does this transcript provide a complete Docker installation walkthrough?
-9. What should you check before upgrading n8n?
-
-### Answer key
-
-1. Node.js is the runtime; NPM is the package manager distributed with Node.js in the demonstrated setup.
-2. The installed Node.js version.
-3. It requests a global package installation.
-4. `http://localhost:5678`.
-5. It may lack production deployment practices such as secure configuration, backups, monitoring, and uptime management.
-6. Stable releases are intended for normal use; prereleases may contain newer features but have less stability assurance.
-7. You manage the installation, configuration, updates, and local/server environment.
-8. No. Docker is discussed conceptually, but the excerpt demonstrates NPM.
-9. Current official documentation, release notes, compatibility, and a backup of important workflows/data.
+When transitioning from local testing to self-hosted production:
+- **Protect Credentials:** Never commit workflow JSON files containing raw API keys to public repositories.
+- **Set Up SSL/TLS:** Always place n8n behind a reverse proxy (e.g. Nginx, Caddy, or Cloudflare Tunnel) with HTTPS.
+- **Set Encryption Keys:** Define `N8N_ENCRYPTION_KEY` in your environment so credentials stay encrypted in the database.
+- **Automate Backups:** Schedule daily snapshots of your database and `.n8n` directory.
 
 ---
 
-## 11. Key takeaways
+# 8. Active Recall Quiz
 
-- n8n can be used through Cloud or run on infrastructure you manage.
-- The lesson demonstrates a local NPM installation: install Node.js → verify `node` and `npm` → install n8n → run `n8n start` → open `localhost:5678` → complete initial setup.
-- The lesson presents Docker as an option for production-style deployments, but does not show the Docker procedure in this excerpt.
-- Self-hosting gives more direct control but transfers operational responsibilities to you.
-- Prefer current official documentation over old recorded commands or version numbers.
+<details>
+<summary><strong>1. What is the difference between Node.js and npm?</strong></summary>
+
+**Node.js** is the JavaScript runtime that executes code outside a browser; **npm** is the package manager used to install and distribute Node.js applications like n8n.
+</details>
+
+<details>
+<summary><strong>2. What does the `-g` flag do during `npm install -g n8n`?</strong></summary>
+
+It installs the package **globally** onto your system path, allowing you to run the `n8n` command from any directory in your terminal.
+</details>
+
+<details>
+<summary><strong>3. What default URL is used to access the local n8n canvas?</strong></summary>
+
+**`http://localhost:5678`** (`localhost` points to your internal loopback network address `127.0.0.1`).
+</details>
+
+<details>
+<summary><strong>4. What happens to your workflows if you press `Ctrl + C` in the terminal running n8n?</strong></summary>
+
+The n8n process shuts down immediately. Workflows will cease running until you restart the server with `n8n start`. (Your saved workflows and credentials remain stored safely on disk).
+</details>
+
+<details>
+<summary><strong>5. Where does local n8n store its database and settings by default?</strong></summary>
+
+In your user profile home directory under the hidden folder **`~/.n8n/`** (specifically in `database.sqlite`).
+</details>
+
+---
+
+# 9. Key Takeaways
+
+- Local NPM installation provides a fast, unmetered environment for building and debugging workflows.
+- Launching requires just two commands: `npm install -g n8n` followed by `n8n start`.
+- The terminal process must remain active for the server to stay online.
+- For permanent 24/7 cloud production, Docker containers provide superior reliability and isolation.
+
+---
+
+<p align="center">
+  <b>Next Step:</b> Master the visual canvas in <a href="03_Interface.md">Chapter 3: The n8n Interface & Workspace</a> or return to the <a href="../README.md">Main Hub</a>.
+</p>

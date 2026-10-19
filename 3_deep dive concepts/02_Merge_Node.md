@@ -1,29 +1,53 @@
-# How to Use the Merge Node in n8n
-## A practical guide with an end-to-end example
+# 🔀 How to Use the Merge Node in n8n
+## A Practical Guide with an End-to-End Example
 
-### What you will learn
-By the end of this lesson, you should be able to:
-- Explain why workflows sometimes need to combine data from two paths.
-- Understand the difference between **Append**, **Combine**, and **Choose Branch**.
-- Configure a Merge node using two input connections.
-- Understand matching fields, position-based matching, and field clashes.
-- Recognize when a Merge node is unnecessary and when it is useful.
+<p align="center">
+  <a href="01_Branching_Workflows.md">⬅️ Prev: Branching Workflows</a> •
+  <a href="../README.md">Main Hub</a> •
+  <a href="03_Set_Node.md">Next: Set / Edit Fields Node ➡️</a> •
+  <a href="https://github.com/shashilabs-io/n8n-docs">GitHub Repository</a>
+</p>
 
 ---
 
-## 1. Start with a business problem
+## 🧭 How to Use This Chapter
 
-Imagine you run an online store. When a new order arrives, your workflow gets two kinds of information:
+> [!TIP]
+> **Stream Convergence:** Whenever workflows split into separate branches to query different databases or APIs, the **Merge Node** is the critical junction that stitches the data back together. Understanding how and when to use **Append**, **Combine**, and **Choose Branch** prevents silent data corruption and missing fields.
 
-1. **Order details** from your store system: order ID, customer ID, and total amount.
-2. **Customer details** from a customer database: customer ID, name, and email address.
+### 🎯 Key Outcomes of this Chapter:
+- Explain why workflows need to unify divergent streams of data.
+- Master the three primary Merge modes: **Append**, **Combine**, and **Choose Branch**.
+- Configure two-input node merges (**Input 1** and **Input 2**).
+- Prevent data mismatches by understanding matching keys, position indexing, and field collisions.
+- Build an end-to-end enrichment pipeline: **Order Data + Customer Database &rarr; Merged Confirmation Email**.
 
-The order system knows what the customer bought, but it may not include the customer's latest contact details. The customer database knows the name and email, but it does not know the details of this particular order.
+---
 
-You want one final record that contains both sets of information so you can send a personalized confirmation email.
+# 1. The Business Problem: Disparate Data Sources
 
-For example, the order path might contain:
+Imagine you run an online store. When a new order arrives, your workflow receives two kinds of information from different systems:
 
+1. **Order details** from your store system: `orderId`, `customerId`, and `total`.
+2. **Customer details** from your CRM/database: `customerId`, `name`, and `email`.
+
+The order system knows *what* the customer bought, but lacks contact details. The customer database knows *who* the customer is, but has no knowledge of this specific purchase.
+
+```mermaid
+flowchart LR
+    A["🛒 Order System<br/>orderId, customerId, total"] --> M["🔀 Merge Node"]
+    B["👤 Customer Database<br/>customerId, name, email"] --> M
+    M --> C["📋 Unified Record<br/>orderId, customerId, total, name, email"]
+
+    style A fill:#4A90E2,stroke:#333,stroke-width:2px,color:#fff
+    style B fill:#FFAA00,stroke:#333,stroke-width:2px,color:#000
+    style M fill:#9B59B6,stroke:#333,stroke-width:2px,color:#fff
+    style C fill:#2ECC71,stroke:#333,stroke-width:2px,color:#fff
+```
+
+### The Payload Transformation
+
+**Input 1 (Order Path):**
 ```json
 {
   "orderId": "ORD-1042",
@@ -32,8 +56,7 @@ For example, the order path might contain:
 }
 ```
 
-The customer lookup path might contain:
-
+**Input 2 (Customer Lookup Path):**
 ```json
 {
   "customerId": "C-17",
@@ -42,8 +65,7 @@ The customer lookup path might contain:
 }
 ```
 
-The desired result is one combined record:
-
+**Desired Combined Output:**
 ```json
 {
   "orderId": "ORD-1042",
@@ -54,63 +76,80 @@ The desired result is one combined record:
 }
 ```
 
-This is the problem the **Merge** node can help solve: bringing data from different inputs together. The exact result depends on the Merge mode and how you configure it.
+This is the problem the **Merge** node solves: bringing disparate data streams together into a single structured output.
 
-## 2. Understand the workflow before configuring the node
+---
 
-A workflow could look like this:
+# 2. Workflow Architecture Overview
 
-```text
-                 ┌──> Get Order Details ─────┐
-Trigger ─────────┤                            ├──> Merge ──> Send Email
-                 └──> Look Up Customer ──────┘
+A typical enrichment workflow layout:
+
+```mermaid
+flowchart LR
+    T["⚡ Trigger"] --> O["📦 Get Order Details<br/>(Input 1)"]
+    T --> C["🔍 Look Up Customer<br/>(Input 2)"]
+    O --> M["🔀 Merge Node<br/>(Mode: Combine by customerId)"]
+    C --> M
+    M --> E["📧 Send Confirmation Email"]
+
+    style T fill:#34495E,stroke:#333,stroke-width:2px,color:#fff
+    style O fill:#4A90E2,stroke:#333,stroke-width:2px,color:#fff
+    style C fill:#FFAA00,stroke:#333,stroke-width:2px,color:#000
+    style M fill:#9B59B6,stroke:#333,stroke-width:2px,color:#fff
+    style E fill:#2ECC71,stroke:#333,stroke-width:2px,color:#fff
 ```
 
-Both paths must provide data to the Merge node. The Merge node has two inputs, commonly called **Input 1** and **Input 2**.
+Both paths supply data to the Merge node's two input terminals: **Input 1** and **Input 2**.
 
-In this example:
-- Input 1 contains the order.
-- Input 2 contains the customer record.
-- Merge produces output based on the selected mode.
+> [!IMPORTANT]
+> A Merge node does not automatically guess which records belong together. You must configure the correct **Mode** and **Matching Criteria** to match your data structure.
 
-**Important:** a Merge node does not magically know which records belong together. You must choose a mode that matches your data and intended result.
+---
 
-## 3. Add and connect the Merge node
+# 3. Step-by-Step Setup: Adding the Merge Node
 
-1. Add the nodes that retrieve the two sets of data.
-2. Add a **Merge** node to the canvas.
-3. Connect the order-details path to **Input 1**.
-4. Connect the customer-lookup path to **Input 2**.
-5. Open the Merge node and review its **Mode** options.
-6. Choose the mode that matches what you want to happen to the incoming items.
-7. Test the upstream nodes first, then test the Merge node and inspect its output.
+1. Add the upstream nodes that retrieve your two distinct datasets.
+2. Add a **Merge** node to the canvas from the node library.
+3. Connect the primary dataset (e.g. order details) to **Input 1**.
+4. Connect the secondary dataset (e.g. customer lookup) to **Input 2**.
+5. Open the Merge configuration panel and review the **Mode** dropdown.
+6. Choose the mode matching your intended data outcome (**Append**, **Combine**, or **Choose Branch**).
+7. Test both upstream nodes first, then test the Merge node to inspect its output payload.
 
-The node's available options can vary by n8n version. The key concepts below describe common Merge modes and their intended uses.
+---
 
-## 4. Mode one: Append
+# 4. Mode 1: Append
 
-### What it does
+### What It Does
+**Append** places items from both inputs into a single combined list of items. It **does not** merge properties into one combined object.
 
-**Append** places the items from the two inputs into one output list. It does not combine the properties of two records into one object.
+```mermaid
+flowchart TD
+    I1["Input 1: 1 Item<br/>{ orderId, total }"] --> A["🔀 Merge (Append)"]
+    I2["Input 2: 1 Item<br/>{ customerId, name }"] --> A
+    A --> O["Output: 2 Separate Items in List<br/>1. { orderId, total }<br/>2. { customerId, name }"]
 
-Suppose Input 1 contains:
+    style I1 fill:#4A90E2,stroke:#333,stroke-width:2px,color:#fff
+    style I2 fill:#FFAA00,stroke:#333,stroke-width:2px,color:#000
+    style A fill:#9B59B6,stroke:#333,stroke-width:2px,color:#fff
+    style O fill:#2ECC71,stroke:#333,stroke-width:2px,color:#fff
+```
 
+**Input 1:**
 ```json
 [
   { "orderId": "ORD-1042", "total": 2499 }
 ]
 ```
 
-And Input 2 contains:
-
+**Input 2:**
 ```json
 [
   { "customerId": "C-17", "name": "Aarav Sharma" }
 ]
 ```
 
-With Append, the result is conceptually:
-
+**Output with Append:**
 ```json
 [
   { "orderId": "ORD-1042", "total": 2499 },
@@ -118,79 +157,61 @@ With Append, the result is conceptually:
 ]
 ```
 
-There are now two items in the output list. The two objects have not become one object.
+> [!NOTE]
+> There are now **two items** in the output list. The two objects have **not** merged into a single object.
 
-### When to use Append
+### When to Use Append
+Use Append when collecting records from different sources into a single stream for uniform downstream processing (e.g., aggregating leads from both Facebook Ads and Google Ads into one queue).
 
-Use it when you want to bring items from both inputs into the same output stream—for example, collecting records from two sources for a later step that can process them in a common way.
+---
 
-**Remember:** Append combines the lists, not the fields of each record.
+# 5. Mode 2: Combine
 
-## 5. Mode two: Combine
+### What It Does
+**Combine** pairs items between Input 1 and Input 2 and merges their properties into unified output items. You must specify how records are matched.
 
-### What it does
-
-**Combine** is intended for cases where items from Input 1 and Input 2 should be paired and their data combined into output items. You must decide how the records should be matched.
-
-Common ways to match items include:
-
-- **Matching fields:** pair records when a selected field has the same value in both inputs.
-- **Position:** pair the first item in Input 1 with the first item in Input 2, the second with the second, and so on.
-
-Exact option labels and additional behaviors may differ by n8n version.
-
-### A. Combine by matching fields
-
-Return to the online-store example. Both paths have a `customerId` field:
-
-Input 1:
-
-```json
-{
-  "orderId": "ORD-1042",
-  "customerId": "C-17",
-  "total": 2499
-}
-```
-
-Input 2:
-
-```json
-{
-  "customerId": "C-17",
-  "name": "Aarav Sharma",
-  "email": "aarav@example.com"
-}
-```
-
-Configure the Merge node to combine items by matching `customerId` in Input 1 with `customerId` in Input 2.
-
-Because both values are `C-17`, the records can be paired. The output can then contain the order fields and customer fields together.
-
-### Why a matching key matters
-
-Suppose Input 1 contains an order for `C-17`, but Input 2 contains customer `C-29`. Those records should not be combined as though they belong to the same person. A stable identifier such as a customer ID is generally safer than matching on a name, because different people can have the same name.
-
-### B. Combine by position
-
-Position-based matching pairs items according to their order in the lists:
-
-| Input 1 position | Input 2 position | Pairing |
+| Combine Strategy | Matching Mechanism | Best Use Case |
 |---|---|---|
-| First item | First item | Pair 1 |
-| Second item | Second item | Pair 2 |
-| Third item | Third item | Pair 3 |
+| **Matching Fields** | Pairs items where a specified key (e.g. `customerId`) has matching values. | Merging database queries, API lookups, and relational joins. |
+| **Position** | Pairs item 1 with item 1, item 2 with item 2, based strictly on array index. | When both sources are guaranteed to be sorted identically. |
 
-This is appropriate only when the two inputs are intentionally aligned in the same order and represent corresponding records.
+### Strategy A: Combine by Matching Fields
 
-**Potential pitfall:** if the first list is sorted by order date but the second list is sorted by customer name, pairing by position can combine unrelated records. Use a shared identifier when possible.
+Returning to the online store example, both paths share a common key: `customerId`.
 
-## 6. What happens when both inputs contain the same field?
+```json
+// Input 1 (Order):
+{ "orderId": "ORD-1042", "customerId": "C-17", "total": 2499 }
 
-Imagine both inputs contain a field named `status`.
+// Input 2 (Customer):
+{ "customerId": "C-17", "name": "Aarav Sharma", "email": "aarav@example.com" }
+```
 
-Input 1:
+Configure the Merge node to match `customerId` in Input 1 with `customerId` in Input 2. Because both values equal `"C-17"`, the node merges their keys into one record.
 
+> [!TIP]
+> **Why Unique Keys Matter:** If Input 1 contains `C-17` and Input 2 contains `C-29`, they will not match. Always use immutable identifiers (like UUIDs or IDs) rather than names, as multiple people can share identical names.
+
+### Strategy B: Combine by Position
+
+Position-based matching pairs items according to index order:
+
+| Input 1 Position | Input 2 Position | Pairing Result |
+|---|---|---|
+| First Item (`[0]`) | First Item (`[0]`) | Pair 1 |
+| Second Item (`[1]`) | Second Item (`[1]`) | Pair 2 |
+| Third Item (`[2]`) | Third Item (`[2]`) | Pair 3 |
+
+> [!WARNING]
+> **Position Matching Pitfall:** If Input 1 is sorted by `orderDate` while Input 2 is sorted by `customerName`, position matching will combine completely unrelated records. Prefer **Matching Fields** whenever possible.
+
+---
+
+# 6. Handling Field Name Collisions
+
+What happens if both inputs contain a property with the exact same name?
+
+**Input 1:**
 ```json
 {
   "orderId": "ORD-1042",
@@ -198,8 +219,7 @@ Input 1:
 }
 ```
 
-Input 2:
-
+**Input 2:**
 ```json
 {
   "customerId": "C-17",
@@ -207,36 +227,46 @@ Input 2:
 }
 ```
 
-Both records use the same field name for different meanings. When combined, there is a field-name conflict. The exact result depends on the Merge configuration and version.
+Both records use the key `status` to mean completely different things. When merged, one value will overwrite the other depending on input priority.
 
-A good data-design practice is to make the meaning explicit before or during the merge, for example:
-- `orderStatus`
-- `customerStatus`
+> [!IMPORTANT]
+> **Best Practice:** Rename ambiguous fields upstream before merging:
+> - Rename Input 1's field to `orderStatus`
+> - Rename Input 2's field to `customerStatus`
+> 
+> This ensures no data is lost or overwritten during the merge step.
 
-Rename ambiguous fields upstream when needed. Then inspect the Merge output to verify which values were preserved.
+---
 
-## 7. Mode three: Choose Branch
+# 7. Mode 3: Choose Branch
 
-### What it does
+### What It Does
+**Choose Branch** routes data from only **one selected input** forward to downstream nodes, discarding or ignoring the other input.
 
-**Choose Branch** is useful when the workflow has two input paths but you want to pass data from one selected input forward, rather than combining both inputs into one result.
+```mermaid
+flowchart TD
+    I1["Input 1: Primary Data"] --> CB["🔀 Merge (Choose Branch: Input 1)"]
+    I2["Input 2: Verification Path"] --> CB
+    CB --> O["Output: Only Input 1 Data Forwarded"]
 
-For example, a workflow might perform a check on two paths, but a later step should continue with the data from Input 1. Choose Branch can be used to select which input's data is passed along, depending on the configuration available in your n8n version.
+    style I1 fill:#4A90E2,stroke:#333,stroke-width:2px,color:#fff
+    style I2 fill:#FFAA00,stroke:#333,stroke-width:2px,color:#000
+    style CB fill:#9B59B6,stroke:#333,stroke-width:2px,color:#fff
+    style O fill:#2ECC71,stroke:#333,stroke-width:2px,color:#fff
+```
 
-This mode is different from Combine:
-- **Combine:** bring related data from both inputs together.
-- **Choose Branch:** pass through the selected input's data.
+### Contrast: Combine vs Choose Branch
+- **Combine:** Synthesizes related data from both inputs into merged records.
+- **Choose Branch:** Acts as a gatekeeper, passing through only the chosen branch's payload once upstream execution completes.
 
-Use the node's options and help text in your installed n8n version to confirm exactly how the selected input and execution behavior are configured.
+---
 
-## 8. A practical walkthrough: enrich an order with customer data
+# 8. Hands-on Tutorial: Order Enrichment Pipeline
 
-Let's build the example end to end.
+Follow these steps to build the complete pipeline:
 
-### Step 1 — Get the order
-
-Use a trigger or order source that outputs a record such as:
-
+### Step 1 — Ingest the Order
+Use a trigger or test source returning an order object:
 ```json
 {
   "orderId": "ORD-1042",
@@ -245,10 +275,8 @@ Use a trigger or order source that outputs a record such as:
 }
 ```
 
-### Step 2 — Look up the customer
-
-Use a database or other customer-data source to retrieve the record matching `customerId = C-17`:
-
+### Step 2 — Look Up the Customer
+Query your database or CRM using `customerId = C-17` to retrieve:
 ```json
 {
   "customerId": "C-17",
@@ -257,67 +285,60 @@ Use a database or other customer-data source to retrieve the record matching `cu
 }
 ```
 
-The actual lookup node and query depend on your database and workflow.
+### Step 3 — Configure the Merge Node
+- Connect the Order node output to **Input 1**.
+- Connect the Customer lookup node output to **Input 2**.
+- Select Mode: **Combine**.
+- Select Combine By: **Matching Fields**.
+- Set Input 1 Field: `customerId` & Input 2 Field: `customerId`.
 
-### Step 3 — Connect both paths to Merge
+### Step 4 — Test and Verify Output
+Execute the Merge node and inspect the JSON output panel:
+```json
+{
+  "orderId": "ORD-1042",
+  "customerId": "C-17",
+  "total": 2499,
+  "name": "Aarav Sharma",
+  "email": "aarav@example.com"
+}
+```
 
-- Connect the order record to Input 1.
-- Connect the customer record to Input 2.
-- Select **Combine**.
-- Choose matching fields and select `customerId` on both inputs.
+### Step 5 — Dispatch the Enriched Message
+Connect the Merge node to an Email node. You can now compose dynamic personalized emails referencing both datasets:
 
-### Step 4 — Test the Merge node
+> *"Hi {{ $json.name }}, your order #{{ $json.orderId }} has been received. Order total: ₹{{ $json.total }}."*
 
-Run the upstream paths and execute the Merge node. Inspect the output JSON and confirm that the result includes:
-- `orderId`
-- `customerId`
-- `total`
-- `name`
-- `email`
+---
 
-If the customer information is missing, check:
-1. Did the customer lookup return an item?
-2. Do both records contain the matching field?
-3. Do the matching values have the same type and value?
-4. Did you choose the correct fields for Input 1 and Input 2?
-5. Does your Merge mode keep only matched records or handle unmatched items differently?
+# 9. Mode Comparison Cheat Sheet
 
-### Step 5 — Use the merged data
-
-Connect the Merge node to an email node. The email node can now use the order ID and total alongside the customer's name and email address.
-
-For example, the message could say:
-
-> Hi Aarav, your order ORD-1042 has been received. Your order total is ₹2,499.
-
-This is only an example message. Configure the email node with your own provider credentials, sender address, and recipient mapping.
-
-## 9. Common mistakes and troubleshooting
-
-| Symptom | What to check |
-|---|---|
-| Output has two separate items instead of one enriched record | You may have selected Append instead of Combine. |
-| The Merge node returns no matched output | Verify the matching fields and their values on both inputs. |
-| Wrong customer data appears on an order | Avoid position matching unless both inputs are deliberately aligned; prefer a shared ID. |
-| Some items disappear | Review the selected matching behavior and how unmatched items are handled in your version. |
-| One input is empty | Test the upstream node and confirm it returns the expected item(s). |
-| Duplicate or conflicting values appear | Check for same-named fields and rename ambiguous fields before merging. |
-| The node behaves differently from a tutorial | Check your n8n version and the options shown in your Merge node. |
-
-## 10. Quick comparison of the modes
-
-| Mode | Main purpose | Simple way to remember it |
+| Mode | Core Purpose | Memory Rule |
 |---|---|---|
-| Append | Put items from both inputs into one output list. | One list, separate items. |
-| Combine | Pair items from the two inputs and combine their data. | Match records and bring fields together. |
-| Choose Branch | Pass data from the selected input onward. | Choose which input to continue with. |
+| **Append** | Combines items from both inputs into a single list. | *One list, separate items.* |
+| **Combine** | Pairs items and merges their properties together. | *Match records and fuse fields.* |
+| **Choose Branch** | Passes data strictly from one selected input. | *Pick one path to proceed.* |
 
-## 11. Practice exercises
+---
 
-### Exercise A — Predict the result
+# 10. Common Mistakes & Troubleshooting
 
-Input 1:
+| Symptom | Probable Cause | Solution |
+|---|---|---|
+| **Output has 2 separate items instead of 1 merged record** | Selected **Append** instead of **Combine**. | Switch mode to **Combine** with matching keys. |
+| **Merge node returns empty matched output** | Key values don't match or have mismatched casing/types (e.g. `17` vs `"17"`). | Ensure keys match exact values and data types. |
+| **Wrong customer paired with order** | Position matching was used on unsorted lists. | Switch to **Matching Fields** on unique identifiers. |
+| **Some items vanish after merge** | Unmatched records are discarded based on join settings. | Review whether an inner or outer join behavior is intended. |
+| **One input is empty** | Upstream node failed to produce output. | Test upstream nodes individually to confirm they emit data. |
+| **Data overwritten unexpectedly** | Identical field names collided during merge. | Rename conflicting fields upstream using an **Edit Fields (Set)** node. |
 
+---
+
+# 11. Practice Exercises & Active Recall
+
+### Exercise A: Predict the Result
+
+**Input 1:**
 ```json
 [
   { "id": 1, "product": "Keyboard" },
@@ -325,8 +346,7 @@ Input 1:
 ]
 ```
 
-Input 2:
-
+**Input 2:**
 ```json
 [
   { "id": 1, "price": 1500 },
@@ -334,39 +354,77 @@ Input 2:
 ]
 ```
 
-1. What is the conceptual output when you use Append?
-2. What would you expect when using Combine by matching `id`?
-3. Why would position matching be risky if Input 2 were sorted differently?
+<details>
+<summary><strong>1. What is the output when using Append mode?</strong></summary>
 
-### Exercise B — Design the merge
+Append returns a list of 4 separate items:
+```json
+[
+  { "id": 1, "product": "Keyboard" },
+  { "id": 2, "product": "Mouse" },
+  { "id": 1, "price": 1500 },
+  { "id": 2, "price": 700 }
+]
+```
+It does not merge keys into single objects.
+</details>
 
-A support workflow has:
-- Input 1: `{ "ticketId": "T-81", "customerId": "C-17", "issue": "Login problem" }`
-- Input 2: `{ "customerId": "C-17", "name": "Aarav Sharma", "plan": "Pro" }`
+<details>
+<summary><strong>2. What is the output when using Combine by matching <code>id</code>?</strong></summary>
 
-Choose a Merge mode and matching field so the support team can see the ticket and customer details together.
+Combine produces 2 merged objects:
+```json
+[
+  { "id": 1, "product": "Keyboard", "price": 1500 },
+  { "id": 2, "product": "Mouse", "price": 700 }
+]
+```
+</details>
 
-### Exercise C — Improve field names
+<details>
+<summary><strong>3. Why is position matching risky here if Input 2 is sorted by price descending?</strong></summary>
 
-Input 1 has `status: "open"` for a ticket. Input 2 has `status: "active"` for a customer account.
-
-Explain why those names can be confusing after a merge, and suggest clearer field names.
-
-### Answer key
-
-**Exercise A**
-1. Append returns the items from both inputs in one list; it does not combine each pair into one object.
-2. Matching on `id` pairs the keyboard with its price and the mouse with its price, assuming the matching behavior is configured accordingly.
-3. Position matching relies on order, so mismatched sorting could pair the wrong product and price.
-
-**Exercise B**
-Use Combine and match `customerId` in Input 1 with `customerId` in Input 2.
-
-**Exercise C**
-Use names such as `ticketStatus` and `customerAccountStatus` so each field's meaning remains clear.
+Position matching pairs items by list index. The Keyboard (`id: 1`) would be paired with the highest price Mouse (`price: 1500`), creating corrupted data records.
+</details>
 
 ---
 
-## Key takeaway
+### Exercise B: Support Desk Merge Design
 
-Use **Append** when you need one list containing items from both inputs, **Combine** when you need related records merged together, and **Choose Branch** when you need to continue with data from a selected input. The most important decision is choosing a mode that matches the shape of your data and the result you want.
+A support workflow receives:
+- **Input 1:** `{ "ticketId": "T-81", "customerId": "C-17", "issue": "Login problem" }`
+- **Input 2:** `{ "customerId": "C-17", "name": "Aarav Sharma", "plan": "Pro" }`
+
+<details>
+<summary><strong>Solution: How should the Merge node be configured?</strong></summary>
+
+Set Mode to **Combine**, choose **Matching Fields**, and map `customerId` from Input 1 to `customerId` from Input 2.
+</details>
+
+---
+
+### Exercise C: Field Collision Resolution
+
+Input 1 has `status: "open"` for a ticket. Input 2 has `status: "active"` for a customer account.
+
+<details>
+<summary><strong>Solution: How should you resolve this collision?</strong></summary>
+
+Rename the fields upstream using an Edit Fields (Set) node to `ticketStatus` and `customerStatus` before the merge to prevent value overwrite.
+</details>
+
+---
+
+# 12. Key Takeaways
+
+- Use **Append** when you need one unified list containing items from both inputs.
+- Use **Combine** when you need to enrich records by joining related fields.
+- Use **Choose Branch** when you only need to continue execution with data from one selected input.
+- Always use stable unique identifiers (like `id` or `uuid`) when joining records.
+- Rename conflicting field names upstream to avoid silent data overwrites.
+
+---
+
+<p align="center">
+  <b>Next Step:</b> Master data transformation in <a href="03_Set_Node.md">Chapter 3: The Set / Edit Fields Node</a> or return to the <a href="../README.md">Main Hub</a>.
+</p>

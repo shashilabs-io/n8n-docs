@@ -1,224 +1,211 @@
-# How to Use the Loop Over Items Node in n8n
-## Batch Processing, Controlled Iteration, and Rate Limits
+# 🔁 How to Use the Loop Over Items Node in n8n
+## Batch Processing, Rate Limit Throttling & Controlled Iterations
 
-### Learning objectives
-
-By the end of this chapter, you should be able to:
-
-- Explain what the **Loop Over Items** node does.
-- Decide when a loop is useful and when normal item processing is enough.
-- Configure a batch size and understand the **Loop** and **Done** outputs.
-- Build a workflow that processes email attachments one at a time.
-- Add a Wait node to reduce the risk of API rate-limit errors.
-- Recognize common data-shape and file-type errors.
+<p align="center">
+  <a href="08_Master_Conditional_Logic.md">⬅️ Prev: Conditional Logic</a> •
+  <a href="../README.md">Main Hub</a> •
+  <a href="10_Master_Error_Handling.md">Next: Master Error Handling ➡️</a> •
+  <a href="https://github.com/shashilabs-io/n8n-docs">GitHub Repository</a>
+</p>
 
 ---
 
-## 1. What is a loop?
+## 🧭 How to Use This Chapter
 
-A **loop** repeats a set of actions for a collection of items. In n8n, the **Loop Over Items** node splits incoming items into batches and sends each batch through a set of nodes. When the loop work is complete, the workflow can continue through the node's **Done** output.
+> [!TIP]
+> **Controlled Iteration:** n8n natively processes all items in a stream concurrently or sequentially without pausing. But when external APIs enforce strict rate limits (e.g. 5 requests per second) or when processing massive binary files, uncontrolled throughput causes HTTP `429 Too Many Requests` crashes. The **Loop Over Items** node provides chunked batching and throttle controls.
 
-Loops are useful when you need control over how a collection is processed—for example, when an external API limits request frequency, when you want to handle a large collection in smaller batches, or when each item needs a sequence of actions.
+### 🎯 Key Outcomes of this Chapter:
+- Understand the mechanics of the **Loop Over Items** node (**Loop** vs **Done** outputs).
+- Know when standard list processing suffices vs when an explicit loop is required.
+- Configure chunked **Batch Sizes** (`1`, `10`, `50`).
+- Prevent API throttling by inserting a **Wait** node inside the iteration cycle.
+- Build a file-processing pipeline: **Gmail Trigger &rarr; Split Attachments &rarr; Loop Batch &rarr; S3 Upload &rarr; Task Card Creation**.
+- Avoid common loop traps (infinite loops, unreturned loop wires, dynamic binary key mismatches).
 
-### Typical use cases
+---
 
-- Process records in batches of 10, 20, or 50 instead of sending the entire collection at once.
-- Call an API with a delay between batches or requests.
-- Upload files one at a time.
-- Perform several steps for each item before moving to the next batch.
+# 1. What Is a Loop in n8n?
 
-## 2. How items move through a loop
+A loop repeats a sequence of actions for a collection of items in controlled chunks.
 
-Conceptually, the node takes the incoming items, sends a batch through the **Loop** output, and repeats until all batches have been processed. The **Done** output is for work that should happen after the loop finishes.
+The **Loop Over Items** node splits an incoming array of items into batches of size `N`, emitting each batch through its **Loop** output. Once all batches have executed, execution continues through the **Done** output.
 
-```text
-Incoming items
-      |
-      v
-Loop Over Items
-   |         |
- Loop       Done
-   |         |
-   v         v
-Process     After-loop
-batch       actions
-   |
-   +---- connect the final loop step back to
-         Loop Over Items to continue
+```mermaid
+flowchart TD
+    IN["📥 Incoming Stream (e.g. 50 Items)"] --> LO["🔁 Loop Over Items<br/>(Batch Size = 10)"]
+    LO -->|"1. Loop Branch (Batch of 10)"| PR["⚙️ Process Batch Steps<br/>(API Call, Transform, Upload)"]
+    PR --> WT["⏳ Wait Node (1-2s Delay)"]
+    WT -->|"Return Wire"| LO
+    LO -->|"2. Done Branch (When All Batches Finish)"| DN["✅ Post-Loop Actions<br/>(Send Final Summary Slack)"]
+
+    style IN fill:#4A90E2,stroke:#333,stroke-width:2px,color:#fff
+    style LO fill:#F39C12,stroke:#333,stroke-width:2px,color:#fff
+    style PR fill:#34495E,stroke:#333,stroke-width:2px,color:#fff
+    style WT fill:#E67E22,stroke:#333,stroke-width:2px,color:#fff
+    style DN fill:#2ECC71,stroke:#333,stroke-width:2px,color:#fff
 ```
 
-The **Loop** output connects to the nodes that should run for each batch. After the last node in that path, connect back to the Loop Over Items node so it can continue with the next batch. Once no batches remain, the Done path can run.
-
-A placeholder such as **Replace Me** may appear in the loop path. It is only a placeholder; replace it with the work you want to perform, or remove it if it is not needed.
-
-## 3. Do you always need this node?
-
-No. n8n nodes commonly process all incoming items as part of their normal operation. If you already have five items and a node can safely process each item, a Loop Over Items node with a batch size of one may be unnecessary.
-
-The important difference is **control**. A loop lets you structure a batch-processing path and add steps such as a Wait node between batches. Simply sending five items to an ordinary node does not, by itself, give you a reliable one-request-per-second schedule.
-
-Use Loop Over Items when the workflow needs deliberate batching or a repeated multi-step path. For straightforward item-by-item transformations, a regular node may be simpler.
-
-## 4. Configure the node
-
-1. Add **Loop Over Items** after the node that produces the collection.
-2. Set **Batch Size** to the number of items to send through the loop path per iteration.
-3. Connect the **Loop** output to the action or sequence of actions to repeat.
-4. Connect the last node in that sequence back to **Loop Over Items**.
-5. Connect **Done** to any action that should happen only after all batches have finished.
-6. Execute the workflow and inspect the number of items at each step.
-
-A batch size of `1` means one item is sent through the loop path per iteration. A batch size of `10` means batches contain up to ten items. The last batch may contain fewer items than the configured size.
+### When to Use Explicit Loops:
+- **Rate-Limited APIs:** Enforce controlled pauses (e.g. 1 request per second) between calls.
+- **Large Batches:** Process 1,000 records in bite-sized chunks of 50 to prevent memory spikes.
+- **Heavy Binary Processing:** Upload massive files one by one to avoid network saturation.
+- **Sequential Multi-Step Jobs:** Perform a complete multi-node sequence for Item 1 before touching Item 2.
 
 ---
 
-## 5. Practical example: process email attachments
+# 2. Do You Always Need a Loop Node?
 
-Imagine an email arrives with five attachments. The goal is to upload image attachments to a task board, creating a page or record for each image.
+**No.** In standard n8n workflows, most nodes already process every incoming item automatically!
 
-The workflow can be organized like this:
-
-```text
-Gmail Trigger
-     |
-     v
-Filter: Email has attachments
-     |
-     v
-Split Out: attachment data
-     |
-     v
-Loop Over Items (Batch Size = 1)
-     |
-   [Loop]
-     |
-     v
-Upload file to temporary storage
-     |
-     v
-Create task-board page with image URL
-     |
-     v
-Wait (e.g. 1–2 seconds)
-     |
-     +------ back to Loop Over Items
-
-   [Done]
-     |
-     v
-Workflow finished / post-loop action
-```
-
-The temporary-storage step is needed in this example because the task-board image block expects a URL. A downloaded email attachment is binary data inside n8n and does not automatically have a publicly accessible URL. Use a storage service that you trust and that is appropriate for the file's sensitivity; temporary public upload services may expose files to anyone with the link.
-
-### Step 1: Receive the email and download attachments
-
-Configure a Gmail Trigger to detect incoming messages. In the trigger's options, enable attachment downloading if that option is available in your installed version. The exact fields and labels can vary by n8n version.
-
-Run a test event and inspect the output. Check whether attachment data is present in the item's **Binary** section.
-
-### Step 2: Keep only emails that contain attachments
-
-Use a Filter or IF node to allow only items that contain binary attachment data to continue. Inspect the actual output shape before setting the condition: binary data is not the same as a regular JSON property.
-
-### Step 3: Split attachments into separate items
-
-One email may be represented by a single item that contains several binary properties. To process each attachment independently, use **Split Out** or the appropriate item-splitting approach for the data shape you have. Configure it based on the actual input available in your n8n version.
-
-After splitting, verify that the output contains one item per attachment. Do not assume the number of email items equals the number of attachment items.
-
-### Step 4: Process each attachment in the loop
-
-Set **Batch Size** to `1`. Put the upload and task-board actions in the Loop path.
-
-For each item:
-
-1. Upload the binary file to an appropriate storage location.
-2. Read the resulting file URL.
-3. Create the task-board page or record and include the URL.
-4. Wait before continuing if the destination API requires a pause.
-5. Connect the final loop step back to Loop Over Items.
-
-### Step 5: Continue after all attachments
-
-Use the **Done** output for actions that should happen once all attachments have been processed, such as sending a completion notification or recording a summary.
-
----
-
-## 6. Why add a Wait node?
-
-External services often impose rate limits. A workflow that sends many requests too quickly can receive errors such as HTTP `429 Too Many Requests`.
-
-A Wait node adds a pause in the loop path. For example, a one-second wait can slow down repeated operations. However, a delay is not a guarantee that you comply with every service's limits: the actual limit may be measured across multiple requests, users, or time windows. Always check the target API's documentation and tune the batch size and delay accordingly.
-
-**Example:** If five files are processed with a one-second wait between iterations, the workflow introduces pauses between processing steps rather than trying to perform the entire sequence as quickly as possible.
-
-## 7. Common problems and how to debug them
-
-| Problem | Likely reason | What to check |
+| Scenario | Use Standard Execution | Use Loop Over Items |
 |---|---|---|
-| The loop only processes one batch | The final loop-path node is not connected back to Loop Over Items | Connect the final step back to the loop node |
-| The Done path runs too early or not as expected | The loop connections are incorrect or the execution path is misunderstood | Inspect the Loop and Done connections and test with a few items |
-| An upload node says binary data is missing | The binary property name is hard-coded or the expected property is absent | Inspect the current item's Binary tab and use the actual property name |
-| A later attachment fails while the first works | Each item may use a different binary property key, such as `attachment_0`, `attachment_1`, etc. | Avoid assuming every item uses the same numbered key; inspect each item and use a dynamic expression where appropriate |
-| The task-board API rejects a file | The API may accept only certain file types or formats | Filter unsupported file types before the upload/create step |
-| Requests are still rate-limited | The delay or batch size does not match the API's policy | Check the API's documented limit and adjust pacing |
-| The workflow is unnecessarily complicated | Normal n8n item processing may already be sufficient | Remove the loop if you do not need controlled batching or a repeated multi-step path |
+| Updating 100 rows in Google Sheets | ✅ Yes (native node handles items) | ❌ Unnecessary |
+| Transforming 50 items with Edit Fields | ✅ Yes (in-memory instant processing) | ❌ Unnecessary |
+| Calling an API that allows max 2 req/sec | ❌ No (fires all 50 items at once) | ✅ **Yes** (Loop + Wait node) |
+| Uploading 5 heavy email attachments | ❌ Risk of timeout / memory overload | ✅ **Yes** (Batch size = 1) |
 
-### Dynamic binary property names
-
-A common source of failure is hard-coding a key such as `attachment_0`. If a later item uses `attachment_1`, the upload node may report that the binary property does not exist.
-
-Inspect the Binary data for each item. Where the node configuration supports expressions, use an expression based on the current item's binary keys instead of assuming a fixed numbered suffix. Test this carefully against the actual shape of the data.
-
-## 8. Best practices
-
-- **Start small:** test the loop with two or three items before processing a large collection.
-- **Verify the data shape:** inspect JSON and Binary output before configuring later nodes.
-- **Choose the batch size deliberately:** larger batches can improve throughput but may increase pressure on external services.
-- **Respect API limits:** use a Wait node where appropriate, but follow the service's actual documented limits.
-- **Filter early:** remove unsupported or irrelevant items before expensive upload or API steps.
-- **Handle errors intentionally:** decide what should happen if one item fails. A loop alone does not automatically make failed operations safe or retry them.
-- **Protect files:** avoid uploading sensitive attachments to public temporary storage. Use an approved storage service and appropriate access controls.
-- **Use Done for after-loop work:** do not place one-time summary actions inside the loop unless they should repeat for every batch.
-
-## 9. Practice exercises
-
-### Exercise 1: Batch customer records
-
-A Google Sheets node returns 45 customer items. You want to send them to an API in batches of 15.
-
-1. Which batch size should you configure?
-2. How many batches are expected?
-3. Where should a final summary notification be connected?
-
-### Exercise 2: Slow down requests
-
-A service rate-limits requests and your workflow processes one file per iteration.
-
-1. Which node can introduce a pause?
-2. Why is a pause alone not a universal guarantee against rate-limit errors?
-
-### Exercise 3: Fix the attachment error
-
-The first attachment uploads successfully, but a later one fails because `attachment_0` is missing.
-
-1. What is the likely cause?
-2. What should you inspect before changing the expression?
-
-### Answer key
-
-1. **Exercise 1:** Batch size `15`; three batches of 15 items; connect the final notification to **Done**.
-2. **Exercise 2:** Use a **Wait** node in the loop path. The service may have limits across different time windows, concurrent requests, or multiple workflows, so check its documentation.
-3. **Exercise 3:** The binary property key may differ between items. Inspect each item's Binary output and configure the upload node to use the correct property dynamically where supported.
+> [!NOTE]
+> Use Loop Over Items when you need **temporal control** (rate throttling) or **chunked batching**. For regular data transforms, standard n8n item flow is faster and cleaner.
 
 ---
 
-## Key takeaways
+# 3. How to Configure the Node
 
-- **Loop Over Items** gives you control over batch-based processing.
-- The **Loop** output is for repeated work; the **Done** output is for work after all batches finish.
-- Connect the last node in the loop path back to Loop Over Items to continue iteration.
-- Normal n8n item processing is often enough; use a loop when controlled batching or a repeated multi-step path is needed.
-- Use Wait nodes thoughtfully and respect external API limits.
-- Inspect binary keys and file types when working with email attachments.
+1. Insert **Loop Over Items** after your data source.
+2. Set **Batch Size**:
+   - `1`: Iterates strictly one item at a time (ideal for heavy files or strict rate limits).
+   - `10`–`50`: Ideal for bulk API operations.
+3. Connect the **Loop** output terminal to your processing steps.
+4. **Critical:** Connect the final node of your loop sequence **back** into the input terminal of **Loop Over Items**.
+5. Connect the **Done** output terminal to actions that should only execute after every batch is completed (e.g. final summary alerts).
+
+> [!IMPORTANT]
+> **The Return Wire:** If you forget to connect the last node in the loop path back to the Loop Over Items node, the loop will execute only the first batch and stop!
+
+---
+
+# 4. Hands-on Blueprint: Processing Email Attachments
+
+Suppose an email arrives with multiple image attachments that must be uploaded to storage and linked on a team task board.
+
+```mermaid
+flowchart TD
+    GM["📬 Gmail Trigger<br/>(Download Attachments = True)"] --> FL["🔍 Filter<br/>(Has Binary Attachments)"]
+    FL --> SO["✂️ Split Out<br/>(One Item per Attachment)"]
+    SO --> LP["🔁 Loop Over Items<br/>(Batch Size = 1)"]
+    
+    subgraph LOOP_BODY["Inside Loop Path"]
+        LP -->|"Loop"| UP["☁️ Upload to S3 / Storage<br/>(Generate Public URL)"]
+        UP --> TB["📋 Create Task Board Card<br/>(Insert Image Block)"]
+        TB --> WT["⏳ Wait (1 Second)"]
+        WT -->|"Loop Back"| LP
+    end
+
+    LP -->|"Done"| DN["💬 Slack Notification<br/>('All attachments uploaded!')"]
+
+    style GM fill:#4A90E2,stroke:#333,stroke-width:2px,color:#fff
+    style FL fill:#34495E,stroke:#333,stroke-width:2px,color:#fff
+    style SO fill:#9B59B6,stroke:#333,stroke-width:2px,color:#fff
+    style LP fill:#F39C12,stroke:#333,stroke-width:2px,color:#fff
+    style UP fill:#16A085,stroke:#333,stroke-width:2px,color:#fff
+    style TB fill:#2980B9,stroke:#333,stroke-width:2px,color:#fff
+    style WT fill:#E67E22,stroke:#333,stroke-width:2px,color:#fff
+    style DN fill:#2ECC71,stroke:#333,stroke-width:2px,color:#fff
+```
+
+### Execution Steps:
+1. **Gmail Trigger:** Receives incoming email with attachments enabled in binary mode.
+2. **Filter:** Discards emails that have no binary attachments.
+3. **Split Out:** Converts a single email containing 5 attachments into 5 distinct items.
+4. **Loop Over Items (Batch Size = 1):** Takes one attachment per cycle.
+5. **Upload & Card Creation:** Uploads the binary stream, grabs the public URL, and attaches it to the task card.
+6. **Wait Node:** Pauses for 1 second to respect API limits.
+7. **Done Branch:** Fires a Slack notification after all 5 attachments are processed.
+
+---
+
+# 5. Why and How to Add a Wait Node
+
+External APIs often return HTTP `429 Too Many Requests` when hit with bursts of requests.
+
+Adding a **Wait node** inside the loop path introduces a deterministic breathing room:
+- **Operation:** Wait
+- **Wait Amount:** `1` or `2`
+- **Unit:** Seconds
+
+> [!WARNING]
+> A 1-second pause helps prevent burst throttling, but does not guarantee immunity from daily or hourly quota caps. Always consult the target service's API quota documentation.
+
+---
+
+# 6. Common Problems & Troubleshooting
+
+| Symptom | Probable Cause | Fix |
+|---|---|---|
+| **Loop only processes 1 batch and stops** | Missing return wire from the last step back to Loop Over Items. | Connect the output of the last loop step back into the Loop node. |
+| **"Done" path triggers immediately** | Wires are inverted (Done wired to loop actions instead of Loop). | Verify that the repeated steps connect to **Loop**, and final steps to **Done**. |
+| **Upload node throws "Binary property not found"** | Property name was hardcoded as `attachment_0`, but subsequent items use dynamic keys. | Inspect the item's binary keys in the output inspector and use dynamic references. |
+| **Still receiving HTTP 429 errors** | Wait time is too short or batch size is too large for the API's quota. | Increase the Wait duration (e.g. from 1s to 3s) or reduce Batch Size to 1. |
+| **Infinite loop running on canvas** | An inner node is emitting newly generated items directly back into the loop input. | Ensure the return wire only feeds completion tokens back to the Loop node. |
+
+---
+
+# 7. Best Practices for Loop Hygiene
+
+- **Test with Small Batches:** Always test with 2 or 3 items before executing a 500-item batch.
+- **Filter Early:** Drop invalid items before entering the loop to avoid wasting API quota.
+- **Protect Binary Data:** Never upload private files to unauthenticated public file dumps.
+- **Keep Summaries in Done:** Never place aggregate or summary notifications inside the loop branch unless you intend to receive an alert per iteration.
+
+---
+
+# 8. Practice Exercises & Active Recall
+
+### Exercise 1: Customer Record Batching
+A Google Sheets node outputs 45 customer items that must be submitted to an API in chunks of 15.
+
+<details>
+<summary><strong>Questions: What batch size, how many iterations, and where does the final summary connect?</strong></summary>
+
+- **Batch Size:** `15`
+- **Iterations:** 3 iterations (15 + 15 + 15)
+- **Final Summary:** Connect to the **Done** output terminal.
+</details>
+
+---
+
+### Exercise 2: Rate Limit Prevention
+Your workflow processes 100 items, and the destination API enforces a strict limit of 1 call per second.
+
+<details>
+<summary><strong>Questions: Which node introduces the delay, and what else should you consider?</strong></summary>
+
+Insert a **Wait** node set to 1 second inside the loop path before wiring back to Loop Over Items. Also verify whether the API enforces concurrency limits across other team members or workflows.
+</details>
+
+---
+
+### Exercise 3: Dynamic Binary Key Troubleshooting
+The first file uploads successfully, but the second fails with `attachment_0 missing`.
+
+<details>
+<summary><strong>Question: What caused this failure and how do you resolve it?</strong></summary>
+
+The email node assigned sequential property keys (`attachment_0`, `attachment_1`, etc.). Hardcoding `attachment_0` breaks on subsequent items. Use dynamic binary key expressions or normalize binary keys before the loop.
+</details>
+
+---
+
+# 9. Key Takeaways
+
+- The **Loop Over Items** node provides chunked batching and throttle control over item processing.
+- The **Loop** branch executes repeated steps; the **Done** branch executes once after all batches finish.
+- Always connect the last step of the loop cycle **back** to the Loop Over Items node.
+- Combine with a **Wait** node to easily avoid HTTP 429 rate limit penalties.
+
+---
+
+<p align="center">
+  <b>Next Step:</b> Build self-healing workflows in <a href="10_Master_Error_Handling.md">Chapter 10: Master Error Handling</a> or return to the <a href="../README.md">Main Hub</a>.
+</p>

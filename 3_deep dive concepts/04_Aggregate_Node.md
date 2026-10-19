@@ -1,31 +1,67 @@
-# How to Use the Aggregate Node in n8n
-## A practical guide with an order-notification example
+# 📦 How to Use the Aggregate Node in n8n
+## Summarizing and Batching Multi-Item Streams
 
-### What you will learn
-By the end of this lesson, you should be able to:
-- Explain why the Aggregate node is useful when many items need to become one summary item.
-- Aggregate selected fields into a list.
-- Understand the difference between many input items and one output item containing a list.
-- Use aggregated data to send one summary email instead of many individual emails.
-- Recognize why aggregation alone does not remove duplicates or replace filtering conditions.
+<p align="center">
+  <a href="03_Set_Node.md">⬅️ Prev: Set / Edit Fields Node</a> •
+  <a href="../README.md">Main Hub</a> •
+  <a href="05_Remove_Duplicates_Node.md">Next: Remove Duplicates Node ➡️</a> •
+  <a href="https://github.com/shashilabs-io/n8n-docs">GitHub Repository</a>
+</p>
 
 ---
 
-## 1. Start with a business problem
+## 🧭 How to Use This Chapter
 
-Imagine an online store has dozens of orders that are still pending. A workflow checks each order and sends a message to the customer-service team.
+> [!TIP]
+> **Batching vs Looping:** By default, n8n executes downstream actions once per incoming item. When processing 50 leads or 100 pending orders, connecting them straight to Slack or Email dispatches 50 to 100 individual messages. The **Aggregate Node** condenses an entire stream of items into a single summary payload.
 
-If there are 41 pending order items, a direct connection to an email node can result in 41 separate emails—one for each incoming item. That may be technically correct, but it can clutter the team's inbox.
+### 🎯 Key Outcomes of this Chapter:
+- Explain why workflows need to collapse many incoming items into a single summary item.
+- Aggregate selected JSON properties into an array.
+- Understand the structural difference between `N` individual items vs `1` item holding an array.
+- Dispatch single consolidated notifications (e.g. daily summaries) instead of high-frequency spam.
+- Learn why aggregation does **not** replace filtering or remove duplicates automatically.
 
-A better approach is to send one summary email that lists the relevant order IDs.
+---
 
-The **Aggregate** node helps with this by collecting data from multiple incoming items and producing a single output item. That item can contain a list of values, such as all pending order IDs.
+# 1. The Business Problem: Notification Spam
 
-> Important distinction: aggregation groups data; it does not automatically remove duplicate values. If an order ID appears more than once, it may still appear more than once in the aggregated list.
+Imagine an e-commerce store with dozens of pending orders requiring manual review. A workflow runs every morning to alert customer support.
 
-## 2. Understand the input data
+If there are 41 pending orders, connecting the query directly to an Email or Slack node triggers **41 separate notifications**:
 
-Suppose a previous node returns three items:
+```mermaid
+flowchart LR
+    A["🛒 41 Pending Orders<br/>(41 Individual Items)"] --> B["📧 Email Node"]
+    B --> C["💥 41 Separate Emails Dispatched<br/>(Inbox Overwhelmed)"]
+
+    style A fill:#E74C3C,stroke:#333,stroke-width:2px,color:#fff
+    style B fill:#34495E,stroke:#333,stroke-width:2px,color:#fff
+    style C fill:#C0392B,stroke:#333,stroke-width:2px,color:#fff
+```
+
+A far better operational pattern is to send **one summary email** containing the full list of pending order IDs:
+
+```mermaid
+flowchart LR
+    A["🛒 41 Pending Orders"] --> B["📦 Aggregate Node"]
+    B --> C["📋 1 Summary Item<br/>{ pendingOrderIds: [...] }"]
+    C --> D["📧 1 Consolidated Email"]
+
+    style A fill:#4A90E2,stroke:#333,stroke-width:2px,color:#fff
+    style B fill:#9B59B6,stroke:#333,stroke-width:2px,color:#fff
+    style C fill:#FFAA00,stroke:#333,stroke-width:2px,color:#000
+    style D fill:#2ECC71,stroke:#333,stroke-width:2px,color:#fff
+```
+
+> [!IMPORTANT]
+> **Aggregation is Not Deduplication:** The Aggregate node groups data; it does **not** make values unique. If an order ID appears multiple times in the source items, it will appear multiple times in the resulting array.
+
+---
+
+# 2. Understanding the Data Structure Shift
+
+Suppose an upstream node outputs three pending orders:
 
 ```json
 [
@@ -35,15 +71,11 @@ Suppose a previous node returns three items:
 ]
 ```
 
-Each object is a separate item. If you connect these three items directly to an email node, the node normally processes each item, potentially sending three emails.
+Each object is a separate item in n8n's item array. If directly wired to an action node, the action runs 3 times.
 
-The goal is to turn the three items into one item that contains an array of order IDs.
+### The Aggregated Result
 
-## 3. What the Aggregate node does
-
-The Aggregate node collects values from multiple items. In the order example, it can collect the `orderId` field from every incoming item and put those values into one list.
-
-Conceptually, the output can look like this:
+When you aggregate the `orderId` property into `pendingOrderIds`:
 
 ```json
 [
@@ -57,174 +89,112 @@ Conceptually, the output can look like this:
 ]
 ```
 
-Notice the two levels:
+### Notice the Two Structural Levels:
+1. **The Outer Array (`[...]`):** Still contains n8n items, but now contains **only 1 item**.
+2. **The Inner Array:** The property `pendingOrderIds` holds the array of extracted strings.
 
-- The **outer list** still exists because n8n passes data between nodes as a list of items.
-- Inside that outer list is **one item**.
-- That item contains the `pendingOrderIds` array.
+Because downstream action nodes execute once per item in the outer array, the downstream node now executes **exactly once**.
 
-So three input items have become one output item. This is the central idea of aggregation.
+---
 
-## 4. Add and configure the Aggregate node
+# 3. Step-by-Step Workflow Setup
 
-A simple workflow can be:
+```mermaid
+flowchart TD
+    GO["📊 Get Orders<br/>(Fetch 100 Rows)"] --> FS["🔀 Filter / Switch<br/>(Status = Pending)"]
+    FS --> AG["📦 Aggregate Node<br/>(Field: orderId &rarr; pendingOrderIds)"]
+    AG --> EM["📧 Send Summary Email<br/>(Dispatches 1 Message)"]
 
+    style GO fill:#4A90E2,stroke:#333,stroke-width:2px,color:#fff
+    style FS fill:#F39C12,stroke:#333,stroke-width:2px,color:#fff
+    style AG fill:#9B59B6,stroke:#333,stroke-width:2px,color:#fff
+    style EM fill:#2ECC71,stroke:#333,stroke-width:2px,color:#fff
+```
+
+### Configuration Steps
+
+1. Add an **Aggregate** node after your Filter or Switch node.
+2. Select the mode for aggregating **Selected Fields** (rather than all item data).
+3. Set the target field to aggregate: `orderId`.
+4. Name the output field `pendingOrderIds`.
+5. Click **Test step** and inspect the output schema.
+
+| Metric | Before Aggregation | After Aggregation |
+|---|---|---|
+| **Item Count** | 41 Input Items | 1 Output Item |
+| **Data Shape** | Individual order objects | One object containing an array of IDs |
+| **Downstream Executions** | 41 Email calls | 1 Consolidated Email call |
+
+---
+
+# 4. Using Aggregated Data in Downstream Actions
+
+Connect the Aggregate node directly to your Email or Slack node.
+
+### Subject Configuration:
 ```text
-Get Orders
-    |
-    v
-Filter or Switch: Pending Orders
-    |
-    v
-Aggregate Order IDs
-    |
-    v
-Send Summary Email
+Pending Orders Summary ({{ $now.toFormat('yyyy-MM-dd') }})
 ```
 
-The filter or Switch node is responsible for selecting the relevant orders. The Aggregate node collects values from the items that reach it.
-
-### Configuration steps
-
-1. Add an **Aggregate** node after the node that outputs the items you want to summarize.
-2. Choose the mode for aggregating selected fields, rather than aggregating all item data.
-3. Select the `orderId` field as the value to collect.
-4. Name the output field `pendingOrderIds` so its purpose is clear.
-5. Test the node and inspect its output.
-
-The exact option labels may differ by n8n version. Look for the mode that aggregates specified fields into a single item.
-
-### Before and after
-
-| Before aggregation | After aggregation |
-|---|---|
-| 41 input items | 1 output item |
-| Each item contains an order ID | One item contains a list of order IDs |
-| Direct email connection can send many emails | Email node can send one summary email |
-
-## 5. Use the aggregated list in an email
-
-After testing the Aggregate node, connect it to the email node.
-
-Instead of using a subject and body intended for one order, use a summary format.
-
-**Example subject:**
-
+### Body Configuration:
 ```text
-Pending orders summary
+Hello Team,
+
+The following pending orders require immediate customer verification:
+
+{{ $json.pendingOrderIds.join(', ') }}
+
+Total Pending: {{ $json.pendingOrderIds.length }}
 ```
 
-You can include the current date/time in the subject if that is useful for the team. The n8n expression `{{ $now }}` represents the current date/time in expressions; check the formatting you want for your workflow.
+> [!TIP]
+> Use `.join('\n• ')` or `.join(', ')` in your JavaScript expressions to format raw arrays into bullet points or clean comma-separated lists for human readability.
 
-**Example email body:**
+---
 
-```text
-Please contact customers to collect the missing details for these pending orders:
+# 5. Aggregation Modes Compared
 
-{{ $json.pendingOrderIds }}
-```
+The Aggregate node supports two primary approaches:
 
-Depending on how the email node renders arrays, the list may need formatting to make it easier to read. Inspect the output and adapt the expression or formatting to your node's expected input.
+| Mode | Behavior | Best Used For |
+|---|---|---|
+| **Aggregate Selected Fields** | Extracts specific fields into dedicated arrays (e.g. `orderIds`). | Lean summaries, notification alerts, ID lookups. |
+| **Aggregate All Item Data** | Gathers the entire object structure of all items into an array of objects. | Passing complete raw datasets to sub-workflows or bulk APIs. |
 
-### What changed?
+---
 
-- Before aggregation, 41 items reached the email node, so it could send 41 emails.
-- After aggregation, one item reaches the email node, containing a list of the order IDs.
-- The email node can now send one message containing the summary.
+# 6. Critical Architecture: Filter Before Aggregating
 
-The Aggregate node is not itself an email-sending node. It changes the shape and number of items passed to the next node.
+Suppose operations needs an alert for **high-priority pending orders**.
 
-## 6. Aggregating selected fields versus all item data
+> [!WARNING]
+> Checking only `priority == "high"` is dangerous. A high-priority order might already be shipped, delivered, or canceled!
 
-The lesson introduces two broad ways to aggregate:
+The filtering logic must evaluate both criteria:
 
-### Option A — Aggregate selected fields
+$$\text{Priority} = \text{"high"} \quad \mathbf{AND} \quad (\text{Status} = \text{"pending"} \;\mathbf{OR}\; \text{Status} = \text{"processing"})$$
 
-Use this when you only need certain values, such as all order IDs.
+**Why this matters:** The Aggregate node blindly summarizes whatever records reach it. If upstream logic leaks delivered orders, your summary will mislead the operations team.
 
-Example:
-- Input items each contain order ID, customer name, email, status, and date.
-- You select only `orderId`.
-- The output contains a list of order IDs inside one item.
+---
 
-This is useful when a summary should include only a specific piece of information.
+# 7. Common Mistakes & Troubleshooting
 
-### Option B — Aggregate all item data into one item
+| Symptom | Probable Cause | Fix |
+|---|---|---|
+| **Email node still sends 40+ messages** | Upstream items bypassed the Aggregate node, or Aggregate was configured to output individual items. | Ensure Aggregate node output contains only 1 item before wiring to Email. |
+| **The aggregated list is empty** | Field name in Aggregate settings doesn't match the incoming JSON property name. | Match property casing exactly (e.g. `orderId` vs `order_id`). |
+| **Output shows raw JSON `[object Object]`** | Array was not formatted for string display. | Use expressions like `{{ $json.pendingOrderIds.join(', ') }}`. |
+| **Duplicate IDs appear in summary** | Source data contains duplicate entries. | Insert a **Remove Duplicates** node prior to aggregation. |
+| **Summary includes completed orders** | Upstream filter condition was incomplete or missing. | Tighten filter criteria before the Aggregate node. |
 
-Use this when you want to collect the incoming item data more broadly into a single output item. The resulting structure is different from simply selecting one field, so inspect the output carefully and choose this option only when it fits what the next node expects.
+---
 
-For the lesson's email example, selected-field aggregation is sufficient because the email only needs a list of order IDs.
+# 8. Practice Exercises & Active Recall
 
-## 7. An important workflow improvement: check all required conditions
+### Exercise A: Output Prediction
 
-Suppose the operations team should be notified only about **high-priority orders that are still pending or processing**.
-
-It is not enough to check only whether `priority` is `high`. A high-priority order might already be shipped, delivered, canceled, or refunded.
-
-The logic needs to check both:
-- Priority is high.
-- Status is pending or processing.
-
-Conceptually:
-
-```text
-Priority = high
-AND
-(Status = pending OR Status = processing)
-```
-
-Use a Filter, If, or Switch-based design to apply the conditions before sending items to the operations team. The exact node arrangement depends on your workflow.
-
-**Why discuss this in an Aggregate lesson?** The Aggregate node summarizes the items it receives. If the upstream logic sends the wrong items, aggregation will summarize the wrong set. Filtering and aggregation solve different problems.
-
-## 8. Aggregation does not mean deduplication
-
-Imagine the input contains:
-
-```json
-[
-  { "orderId": "ORD-001" },
-  { "orderId": "ORD-001" },
-  { "orderId": "ORD-002" }
-]
-```
-
-Aggregating `orderId` can produce:
-
-```json
-[
-  {
-    "pendingOrderIds": [
-      "ORD-001",
-      "ORD-001",
-      "ORD-002"
-    ]
-  }
-]
-```
-
-The repeated ID may remain in the array. Aggregation collects values; it does not necessarily make those values unique.
-
-If you need one entry per unique order ID, add a deduplication step or use a suitable uniqueness operation before or after aggregation. Verify the result rather than assuming aggregation removes duplicates.
-
-## 9. Common mistakes and troubleshooting
-
-| Problem | What to check |
-|---|---|
-| The email node still sends multiple emails | Check how many items leave Aggregate. The desired summary pattern should normally output one item. |
-| The list of order IDs is missing | Verify the selected field name and inspect the incoming items. |
-| The email shows an awkward array representation | Format the array for the email body and test the rendering. |
-| Duplicate order IDs remain | Add a deduplication step; Aggregate does not guarantee unique values. |
-| The summary includes shipped or delivered orders | Correct the upstream status and priority conditions before aggregation. |
-| The output shape is unexpected | Confirm whether you selected specific fields or aggregated all item data. |
-| The node output contains one item but the array has many values | This is expected: one item can contain a list of many values. |
-
-## 10. Practice exercises
-
-### Exercise A — Predict the output
-
-Input:
-
+**Input:**
 ```json
 [
   { "ticketId": "T-10", "team": "Support" },
@@ -233,23 +203,8 @@ Input:
 ]
 ```
 
-If you aggregate the `ticketId` field into an output field named `ticketIds`, what should the conceptual output contain?
-
-### Exercise B — Reduce notification noise
-
-A workflow has 25 pending orders and currently sends 25 emails to the service team. Describe where you would put the Aggregate node and what field you would aggregate to send one summary email.
-
-### Exercise C — Find the problem
-
-A workflow aggregates high-priority orders and then sends the list to operations. The summary includes orders that are already delivered. What is wrong with the workflow logic?
-
-### Exercise D — Handle duplicates
-
-Your aggregated list contains `ORD-001` twice. Does that necessarily mean the Aggregate node failed? What should you do if the summary should include each order only once?
-
-### Answer key
-
-**Exercise A**
+<details>
+<summary><strong>Task: What is the output when aggregating ticketId into ticketIds?</strong></summary>
 
 ```json
 [
@@ -258,21 +213,50 @@ Your aggregated list contains `ORD-001` twice. Does that necessarily mean the Ag
   }
 ]
 ```
-
-**Exercise B**
-
-Put Aggregate after the node that selects pending orders and before the email node. Aggregate the order ID field into one list, then send the resulting single item to the email node.
-
-**Exercise C**
-
-The upstream logic checked priority but did not also restrict the order status. Add conditions so only high-priority orders with an allowed status reach Aggregate.
-
-**Exercise D**
-
-No. Aggregate collects values and may preserve duplicates. Add a deduplication step or uniqueness logic and verify the resulting list.
+Three incoming items become one item containing an array of three strings.
+</details>
 
 ---
 
-## Key takeaway
+### Exercise B: Reducing Alert Fatigue
 
-The Aggregate node is useful when many incoming items should become one summary item containing a collection of values. Place it after the relevant filtering or routing logic and before the node that should send or process the summary. Remember: **aggregate to collect, filter to select, and deduplicate to remove repeats.**
+<details>
+<summary><strong>Task: A workflow currently fires 25 individual emails for 25 pending orders. Where do you place the Aggregate node?</strong></summary>
+
+Place the Aggregate node directly after the pending orders filter and before the Email node. Aggregate `orderId` into `pendingOrderIds`, so the Email node fires only once with the full list.
+</details>
+
+---
+
+### Exercise C: Root Cause Analysis
+
+<details>
+<summary><strong>Problem: An aggregated summary sent to operations includes already-delivered orders. What went wrong?</strong></summary>
+
+The upstream filter checked priority (e.g. `priority == "high"`) but omitted the status condition (`status == "pending"`). Aggregation only collects the items passed to it; filtering must enforce business constraints upstream.
+</details>
+
+---
+
+### Exercise D: Deduplication Logic
+
+<details>
+<summary><strong>Question: If your aggregated list contains ORD-001 twice, did the Aggregate node fail?</strong></summary>
+
+No. The Aggregate node's job is solely grouping items, not deduplication. To ensure unique values, insert a **Remove Duplicates** node before aggregation.
+</details>
+
+---
+
+# 9. Key Takeaways
+
+- The **Aggregate** node condenses multiple incoming items into a single item containing array collections.
+- It prevents email/Slack notification spam by converting item-by-item actions into single summary dispatches.
+- Downstream actions execute once for each item in the outer array.
+- **Rule of Thumb:** Filter to select &rarr; Deduplicate to ensure uniqueness &rarr; Aggregate to collect.
+
+---
+
+<p align="center">
+  <b>Next Step:</b> Eliminate duplicate data in <a href="05_Remove_Duplicates_Node.md">Chapter 5: The Remove Duplicates Node</a> or return to the <a href="../README.md">Main Hub</a>.
+</p>

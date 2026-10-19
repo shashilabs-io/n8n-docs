@@ -1,303 +1,303 @@
-# Master Error Handling in n8n
-## Build Reliable Workflows That Recover from Errors
+# 🛡️ Master Error Handling in n8n
+## Resilient Workflows That Gracefully Recover from Failures
 
-### Learning objectives
-
-By the end of this chapter, you should be able to:
-
-- Explain why error handling matters in automation.
-- Distinguish retrying an operation from continuing after a failure.
-- Configure a node to stop, continue with an error item, or use a separate error output.
-- Route failed items to logging or notification steps.
-- Preserve useful context so a developer can understand what failed.
-- Build a loop that continues processing later items after an individual item fails.
+<p align="center">
+  <a href="09_Loop_Over_Items_Node.md">⬅️ Prev: Loop Over Items Node</a> •
+  <a href="../README.md">Main Hub</a> •
+  <a href="11_How_to_Optimize_Workflows.md">Next: Workflow Optimization ➡️</a> •
+  <a href="https://github.com/shashilabs-io/n8n-docs">GitHub Repository</a>
+</p>
 
 ---
 
-## 1. What is error handling?
+## 🧭 How to Use This Chapter
 
-**Error handling** is the process of deciding what a workflow should do when an operation fails. Without an appropriate strategy, a single failure can stop the remaining execution. With error handling, a workflow can retry temporary failures, record permanent failures, notify someone, or continue processing other records.
+> [!TIP]
+> **Defensive Architecture:** Production automation runs into dirty data, network blips, expired tokens, and third-party rate limits. A fragile workflow crashes entirely on the first failure, leaving remaining items stranded. A resilient n8n workflow distinguishes between transient blips (retrying with exponential backoff) and fatal errors (dead-letter logging, alerting, and continuing execution).
 
-External services and APIs can become temporarily unavailable. File uploads can fail. A destination may reject a file type or malformed request. A robust workflow plans for these cases rather than assuming every operation will succeed.
-
-### Common examples
-
-- Retry an API request that may have failed temporarily.
-- Record details when a file upload fails.
-- Notify a developer when an email or integration step fails.
-- Continue processing the remaining records when one record cannot be handled.
-- Queue a failed message for later processing, where the system supports it.
-
-**Important:** Error handling does not mean hiding every error. It means choosing a suitable response and making failures visible enough to investigate.
-
-## 2. Example: one invalid attachment stops a workflow
-
-Imagine an email contains nine attachments. The workflow uploads image attachments to a task board, creating a page for each image. The task board accepts images, but one attachment is a PDF.
-
-When the workflow reaches the PDF, the destination rejects it because the selected block expects an image. If the node is configured to stop the workflow on error, processing halts at that attachment and later items may not be processed.
-
-The desired outcome is different:
-
-- Upload the supported images.
-- Record or notify someone about the unsupported PDF.
-- Continue processing the remaining attachments.
-
-This example illustrates why a workflow needs both an error policy and a clear path for failed items.
-
-## 3. Three different strategies
-
-### Strategy A: Retry on Fail
-
-A retry is useful when an error may be temporary—for example, a brief network problem or a temporarily unavailable service.
-
-In the node's **Settings**, enable **Retry On Fail** if it is available. Configure the retry count and wait interval according to the options shown in your n8n version.
-
-Conceptually:
-
-```text
-Attempt operation
-      |
-      v
-   Failed?
-   /    \
- No      Yes
- |        |
-Continue  Retry if attempts remain
-          |
-          v
-     Stop/report if retries fail
-```
-
-A retry is not a fix for a permanent problem. If a PDF is sent to an operation that accepts only images, retrying the same request with the same input will generally fail again. Validate the input or route it to a suitable handler instead.
-
-### Strategy B: Continue with an error item in the regular output
-
-The node's **On Error** setting may offer an option named **Continue (using regular output)** or similar wording, depending on the n8n version.
-
-With this approach, the workflow can continue after a node failure, and error information may appear in the regular output as an item. A later IF node can check whether an error field exists and route the item to a logging or notification path.
-
-Conceptually:
-
-```text
-Operation
-   |
-   v
-Regular output
-   |
-   v
-IF: does an error field exist?
-   |                  |
-  Yes                 No
-   |                  |
-Log / notify       Continue normal work
-```
-
-Inspect the actual output of the failed node before choosing the condition. Do not assume every node or version uses precisely the same error structure.
-
-### Strategy C: Continue using a separate error output
-
-Where supported, choose **Continue (using error output)** or the equivalent option. The node then provides a normal success output and a separate error output.
-
-- Connect the success output to the next normal step.
-- Connect the error output to a logger, database, or notification node.
-- Include useful information from the failed item in the error report.
-- If the workflow is inside a loop, ensure the intended paths reconnect correctly so later items can be processed.
-
-Conceptually:
-
-```text
-                 +--> Success output --> Wait / next loop step
-Input --> Action |
-                 +--> Error output ----> Log details / notify team
-```
-
-This approach makes success and failure paths explicit and can avoid needing a separate IF node merely to detect an error item.
-
-**Version note:** Available setting labels and output ports can vary. Use the options visible in your installed n8n node and verify them with a test execution.
+### 🎯 Key Outcomes of this Chapter:
+- Internalize the philosophy of defensive automation: handling failures without hiding errors.
+- Master the difference between **Transient Faults** (network drops) vs **Permanent Failures** (schema / format rejections).
+- Configure node-level recovery settings: **Retry On Fail** and **On Error** policies.
+- Compare **Continue (Regular Output)** vs **Continue (Using Error Output)**.
+- Build fault-tolerant batch loops where an invalid item is recorded while subsequent items continue processing.
+- Structure actionable incident notifications (embedding item IDs, timestamps, and stack traces).
 
 ---
 
-## 4. Build a practical error-handling workflow
+# 1. Why Error Handling Is Mandatory
 
-The following pattern uses the attachment-processing example.
+In production environments, external APIs and data sources will inevitably fail:
+- Stripe drops a connection during high traffic.
+- Google Sheets reaches its per-minute read quota.
+- A user uploads a `.pdf` to an image-only pipeline.
+- An expired OAuth2 token rejects an API call.
 
-```text
-Gmail Trigger
-     |
-     v
-Filter attachments
-     |
-     v
-Split attachments into items
-     |
-     v
-Loop Over Items
-     |
-   [Loop]
-     |
-     v
-Upload file
-     |
-     v
-Create task-board page
-     | success                 | error
-     v                         v
-Wait / continue loop       Send error notification
-     |                         |
-     +---- back to loop        +---- log failed item
+```mermaid
+flowchart TD
+    subgraph FRAGILE["❌ Default Unhandled Workflow"]
+        A1["Item 1 (Success)"] --> A2["Item 2 (Fails: Invalid Type)"]
+        A2 -->|💥 Crash| A3["[Workflow Halts Completely]"]
+        A3 -.->|Never Processed| A4["Item 3 & Item 4 Lost"]
+    end
 
-   [Done]
-     |
-     v
-After-loop action
+    subgraph RESILIENT["✅ Fault-Tolerant Workflow"]
+        B1["Item 1 (Success)"] --> B2["Item 2 (Fails)"]
+        B2 -->|Error Branch| LOG["📝 Dead-Letter Log & Alert"]
+        B2 -->|Continue Loop| B3["Item 3 (Success)"]
+        B3 --> B4["Item 4 (Success)"]
+    end
+
+    style FRAGILE fill:#FDEDEC,stroke:#E74C3C,stroke-width:2px
+    style RESILIENT fill:#EAFAF1,stroke:#2ECC71,stroke-width:2px
+    style A2 fill:#E74C3C,stroke:#333,stroke-width:2px,color:#fff
+    style A3 fill:#C0392B,stroke:#333,stroke-width:2px,color:#fff
+    style B2 fill:#F39C12,stroke:#333,stroke-width:2px,color:#fff
+    style LOG fill:#E74C3C,stroke:#333,stroke-width:2px,color:#fff
+    style B3 fill:#2ECC71,stroke:#333,stroke-width:2px,color:#fff
+    style B4 fill:#2ECC71,stroke:#333,stroke-width:2px,color:#fff
 ```
 
-### Step 1: Decide which errors are retryable
-
-Before configuring the node, decide whether the failure is likely temporary or caused by invalid input.
-
-| Failure example | Possible response |
-|---|---|
-| Temporary network or service outage | Retry a limited number of times |
-| Unsupported file type | Filter it out or route it to an alternate handler |
-| Missing required field | Validate the input and log the invalid record |
-| Invalid credentials | Notify the owner and fix the credential configuration |
-| API rate limit | Respect the service's policy and adjust request pacing |
-
-These are starting points, not universal rules. The right response depends on the service and the consequences of repeating the operation.
-
-### Step 2: Configure retry behavior when appropriate
-
-Open the relevant node's **Settings** and inspect **Retry On Fail**. Enable it only when repeating the operation is reasonable. Choose a limited retry count and interval based on the service's behavior and the available configuration.
-
-Avoid repeatedly retrying permanent errors such as unsupported formats or invalid input.
-
-### Step 3: Choose the node's On Error behavior
-
-Open the node's **Settings** and find **On Error**.
-
-- **Stop Workflow:** the execution stops when this node fails.
-- **Continue with regular output:** execution can continue with error information in the regular output.
-- **Continue using error output:** failed items are sent through a separate error output, where supported.
-
-The exact labels may vary across n8n versions. Test the selected behavior with a deliberately invalid input in a safe test workflow.
-
-### Step 4: Send a useful error notification
-
-Connect the error output to an email or another notification node. A message such as “An error occurred” is usually not enough to investigate.
-
-Include available context such as:
-
-- Workflow or operation name.
-- The failed item identifier, filename, or URL.
-- The error message returned by the node.
-- The time of the failure, if available.
-- The next action taken, such as “item logged; remaining items will continue.”
-
-Use only fields actually present in the output. A notification should not assume a URL, filename, or error property exists for every failure.
-
-### Step 5: Continue the loop correctly
-
-If the failed item should not stop processing, connect the appropriate success and error paths so the loop can proceed as intended. In the example, the success path waits and reconnects to **Loop Over Items**. The error path logs or notifies and should also rejoin the intended loop path if the goal is to continue with the remaining items.
-
-Test with a small collection that includes both a valid item and a known invalid item. Confirm that the valid items before and after the failure are processed and that the invalid item is logged.
+> [!IMPORTANT]
+> **Error Handling $\neq$ Error Hiding:** Handling an error does not mean silently swallowing it. It means preventing total workflow crashes while creating clear audit trails and incident alerts for engineering teams.
 
 ---
 
-## 5. Why context matters
+# 2. Real-World Scenario: The Unsupported Attachment
 
-An error message is most useful when it is connected to the item that caused it.
+Imagine an email workflow that processes nine attachments by creating an image card for each on a Kanban task board. The first eight attachments are PNGs, but the ninth is a PDF invoice.
 
-For example, compare these notifications:
+When the node tries to create an image block for the PDF, the API throws an HTTP `400 Bad Request`.
+- **Default Behavior:** Workflow aborts. The previous items might be incomplete, and no alert is triggered explaining why.
+- **Resilient Behavior:**
+  1. The eight valid images are uploaded.
+  2. The PDF is captured on the error output, logged in an audit sheet, and a Slack alert is dispatched: *"Invoice.pdf skipped: unsupported format."*
+  3. The workflow successfully terminates with full visibility.
 
-**Not useful enough**
+---
 
-```text
-Error occurred in your workflow.
+# 3. The Three Node-Level Recovery Strategies
+
+```mermaid
+flowchart TD
+    N["⚙️ Node Settings: Error Strategies"]
+    N --> S1["1. Retry on Fail<br/>(Transient network/API outages)"]
+    N --> S2["2. Continue (Regular Output)<br/>(Emits error payload in main stream)"]
+    N --> S3["3. Continue (Error Output)<br/>(Splits success and error terminals)"]
+
+    style N fill:#34495E,stroke:#333,stroke-width:2px,color:#fff
+    style S1 fill:#4A90E2,stroke:#333,stroke-width:2px,color:#fff
+    style S2 fill:#F39C12,stroke:#333,stroke-width:2px,color:#fff
+    style S3 fill:#2ECC71,stroke:#333,stroke-width:2px,color:#fff
 ```
 
-**More useful**
+### Strategy 1: Retry On Fail
+Best for transient failures (temporary network blips, 502 Bad Gateway, rate throttling).
 
-```text
-The task-board page could not be created.
-File: invoice.pdf
-Reason: The destination expects an image for this block.
-Action: The failed item was logged for review.
+- **Location:** Node Settings &rarr; **Retry On Fail** toggle.
+- **Max Tries:** Typically `3` to `5`.
+- **Wait Between Tries:** `1000ms`–`5000ms`.
+
+```mermaid
+flowchart LR
+    A["Attempt Action"] --> B{"Failed?"}
+    B -->|"No"| C["Continue Stream"]
+    B -->|"Yes"| D{"Retries Left?"}
+    D -->|"Yes"| E["Wait & Retry"]
+    E --> A
+    D -->|"No"| F["Emit Error / Halt"]
+
+    style A fill:#4A90E2,stroke:#333,stroke-width:2px,color:#fff
+    style B fill:#F39C12,stroke:#333,stroke-width:2px,color:#fff
+    style C fill:#2ECC71,stroke:#333,stroke-width:2px,color:#fff
+    style D fill:#E67E22,stroke:#333,stroke-width:2px,color:#fff
+    style E fill:#34495E,stroke:#333,stroke-width:2px,color:#fff
+    style F fill:#E74C3C,stroke:#333,stroke-width:2px,color:#fff
 ```
 
-The second message is illustrative. In a real workflow, populate the fields dynamically from data actually returned by the failed node. Do not hard-code a sample filename or error message as if it were the real failure.
+> [!WARNING]
+> **Never retry permanent schema errors:** If an API rejects a request due to missing fields or bad syntax, retrying 5 times will only waste execution quota and delay completion.
 
-When using a separate error output, inspect its data. It may contain both error details and context from the item that failed, allowing the notification to identify the specific URL, filename, record, or operation.
+---
 
-## 6. Common mistakes
+### Strategy 2: Continue (Using Regular Output)
+The node does not stop execution when an item fails; instead, it outputs an error object in the standard item array. Downstream, an **If** node inspects whether `error` exists:
 
-| Mistake | Why it causes problems | Better approach |
+```mermaid
+flowchart LR
+    A["API Action"] --> B["Regular Output Stream"]
+    B --> C{"If: $json.error != null?"}
+    C -->|"Yes (Error)"| D["Log Error / Notify Team"]
+    C -->|"No (Success)"| E["Normal Processing"]
+
+    style A fill:#4A90E2,stroke:#333,stroke-width:2px,color:#fff
+    style B fill:#34495E,stroke:#333,stroke-width:2px,color:#fff
+    style C fill:#F39C12,stroke:#333,stroke-width:2px,color:#fff
+    style D fill:#E74C3C,stroke:#333,stroke-width:2px,color:#fff
+    style E fill:#2ECC71,stroke:#333,stroke-width:2px,color:#fff
+```
+
+---
+
+### Strategy 3: Continue (Using Error Output)
+The cleanest, most readable pattern. The node gains two distinct physical output connectors:
+- **Upper Terminal (Success):** Emits cleanly processed items.
+- **Lower Terminal (Error):** Emits items that encountered errors along with stack trace metadata.
+
+```mermaid
+flowchart LR
+    IN["Incoming Item"] --> ACT["⚙️ Action Node"]
+    ACT -->|"✅ Success Output"| SC["Next Workflow Step"]
+    ACT -->|"❌ Error Output"| ER["Dead-Letter Queue / Alert"]
+
+    style IN fill:#4A90E2,stroke:#333,stroke-width:2px,color:#fff
+    style ACT fill:#34495E,stroke:#333,stroke-width:2px,color:#fff
+    style SC fill:#2ECC71,stroke:#333,stroke-width:2px,color:#fff
+    style ER fill:#E74C3C,stroke:#333,stroke-width:2px,color:#fff
+```
+
+---
+
+# 4. Fault-Tolerant Loop Architecture
+
+When iterating through a list of items inside a **Loop Over Items** node, an error on item 4 must not abort items 5 through 10:
+
+```mermaid
+flowchart TD
+    GM["📬 Gmail Trigger"] --> SO["✂️ Split Attachments"]
+    SO --> LP["🔁 Loop Over Items"]
+    
+    subgraph FAULT_TOLERANT_LOOP["Inside Loop"]
+        LP -->|"Loop"| UP["☁️ Upload Binary"]
+        UP --> TB["📋 Create Task Card"]
+        
+        TB -->|"✅ Success"| WT["⏳ Wait 1s"]
+        TB -->|"❌ Error"| AL["🚨 Slack Alert & Log"]
+        
+        WT -->|"Continue Loop"| LP
+        AL -->|"Continue Loop"| LP
+    end
+
+    LP -->|"Done"| DN["🏁 All Items Completed"]
+
+    style GM fill:#4A90E2,stroke:#333,stroke-width:2px,color:#fff
+    style SO fill:#9B59B6,stroke:#333,stroke-width:2px,color:#fff
+    style LP fill:#F39C12,stroke:#333,stroke-width:2px,color:#fff
+    style UP fill:#34495E,stroke:#333,stroke-width:2px,color:#fff
+    style TB fill:#2980B9,stroke:#333,stroke-width:2px,color:#fff
+    style WT fill:#2ECC71,stroke:#333,stroke-width:2px,color:#fff
+    style AL fill:#E74C3C,stroke:#333,stroke-width:2px,color:#fff
+    style DN fill:#16A085,stroke:#333,stroke-width:2px,color:#fff
+```
+
+### Notice the Critical Wiring:
+Both the **Success** branch (after Wait) and the **Error** branch (after Logging/Alert) reconnect back to the **Loop Over Items** input. This ensures that whether an item succeeds or fails, the loop continues to process the remaining items!
+
+---
+
+# 5. Designing Actionable Incident Alerts
+
+Generic error alerts like *"An error occurred in workflow"* force developers to dig through raw execution logs. Good alerts provide instant diagnosis context:
+
+### ❌ Poor Alert:
+```text
+Workflow failure detected. Check executions.
+```
+
+### ✅ High-Context Alert:
+```text
+🚨 Task Board Upload Failed!
+• Workflow: CRM Attachment Ingest
+• Item ID: ORD-90412
+• File Name: invoice_receipt.pdf
+• Target API: Notion Database API
+• Error Code: 400 Bad Request
+• Message: "Property 'image' expects mime type image/*, received application/pdf"
+• Action Taken: Item logged to #dead-letter-sheet. Workflow continuing.
+```
+
+> [!TIP]
+> Use expression references like `{{ $json.error.message }}` or `{{ $json.error.description }}` to pull exact stack trace information directly into Slack or Email messages.
+
+---
+
+# 6. Common Mistakes to Avoid
+
+| Anti-Pattern | Operational Consequence | Engineering Fix |
 |---|---|---|
-| Retrying every error | Permanent input errors will usually fail repeatedly | Retry only errors that may be temporary |
-| Continuing without logging | The workflow appears to succeed while failed items go unnoticed | Record the failure or alert someone |
-| Sending a generic notification | The team cannot identify the failed item | Include available item and error details |
-| Assuming a failed item was processed successfully | “Workflow completed” does not mean every operation succeeded | Inspect outputs and record failures separately |
-| Forgetting to reconnect the loop path | The loop may stop after the current item or batch | Check the success and error connections and test several items |
-| Assuming all error outputs have the same fields | Output structure can differ by node and error mode | Inspect a real test execution before mapping fields |
-| Retrying unsupported files | Repeating the same invalid request does not make the file valid | Filter or route unsupported file types before the destination node |
-
-## 7. Testing checklist
-
-Before relying on a workflow in production, test the cases that matter:
-
-- [ ] A valid item succeeds.
-- [ ] A known invalid item reaches the intended error path.
-- [ ] A retryable failure is retried only the configured number of times.
-- [ ] A permanent failure is logged or reported.
-- [ ] Later items continue when that is the intended behavior.
-- [ ] Error notifications identify the failed item using real output fields.
-- [ ] The workflow does not accidentally repeat one-time actions.
-- [ ] Credentials, URLs, and sensitive file contents are not exposed in unnecessary notifications.
-
-## 8. Practice exercises
-
-### Exercise 1: Temporary API failure
-
-An API request fails because the service is temporarily unavailable.
-
-- Which strategy might help?
-- Why should the number of retries be limited?
-
-### Exercise 2: Unsupported file type
-
-A task-board image block rejects a PDF attachment.
-
-- Should you keep retrying the same request?
-- What is a better response?
-
-### Exercise 3: Continue after one failure
-
-A workflow processes ten records. Record 4 fails, but records 5–10 should still be processed.
-
-- Which On Error behavior could help?
-- What should happen to the failed record?
-- What loop connection should you verify?
-
-### Exercise 4: Improve an alert
-
-The current notification only says, “Error occurred.”
-
-Name three useful details to include, if they are available in the failed node's output.
-
-### Answer key
-
-1. **Exercise 1:** Use **Retry On Fail** for a potentially temporary problem. Limit retries to avoid unnecessary repeated requests and long execution delays.
-2. **Exercise 2:** Do not repeatedly retry the same unsupported file. Filter it out, convert it if appropriate, or route it to an alternate handler and log the result.
-3. **Exercise 3:** Use a continue mode, such as a separate error output where supported. Log or notify about record 4, then make sure the error path reconnects to the intended loop path if processing should continue.
-4. **Exercise 4:** Examples include the failed record ID, filename or URL, error message, operation name, and timestamp—only when those values are available.
+| **Retrying every single failure** | Wastes execution quotas on permanent input errors. | Retry only network drops and 5xx errors; filter schema issues. |
+| **Silent continuation** | "Workflow Completed" status hides silent business data loss. | Always attach a logger or notification node to the error output. |
+| **Missing loop return wire** | Loop halts permanently after the first failed item. | Wire the error notification node back into Loop Over Items. |
+| **Leaking credentials in alerts** | Exposing API secrets or customer PII in Slack channels. | Sanitize payloads before embedding them in alert messages. |
 
 ---
 
-## Key takeaways
+# 7. Production Readiness Checklist
 
-- Error handling decides what happens when a workflow step fails.
-- **Retry On Fail** is useful for potentially temporary problems, not permanent invalid inputs.
-- **On Error** determines whether the workflow stops or continues, and may provide a separate error output.
-- Error paths should record or report failures with enough context to investigate.
-- In loops, connect the success and error paths intentionally so one failed item does not unintentionally prevent later items from being processed.
-- Test both successful and failing cases before relying on the workflow.
+Before activating critical customer-facing workflows:
+- [ ] Valid happy-path items process completely.
+- [ ] Injected bad items (e.g. malformed JSON, wrong file type) route to the error branch.
+- [ ] Retries are capped at a reasonable limit (3–5 max).
+- [ ] Error messages output concrete item IDs and reason strings.
+- [ ] Loops continue executing subsequent items after a single failure.
+- [ ] No sensitive authentication headers or passwords leak into alert notifications.
+
+---
+
+# 8. Practice Exercises & Active Recall
+
+### Exercise 1: Transient vs Permanent Failures
+An external API call returns HTTP `503 Service Unavailable`.
+<details>
+<summary><strong>Question: What strategy should be applied and why?</strong></summary>
+
+Enable **Retry On Fail** with an exponential backoff interval (e.g. 3 retries, 2 seconds apart). HTTP 503 indicates temporary server overload that typically clears quickly.
+</details>
+
+---
+
+### Exercise 2: Schema Rejection
+A database insert node fails with `Column 'email' cannot be null`.
+<details>
+<summary><strong>Question: Should you configure Retry On Fail here?</strong></summary>
+
+No! Retrying the identical payload will repeatedly fail. The item must be routed to an error output, logged, and validated upstream with an **Edit Fields** or **Filter** node.
+</details>
+
+---
+
+### Exercise 3: Fault-Tolerant Looping
+In a batch of 10 items, Item #4 fails.
+<details>
+<summary><strong>Question: How do you ensure items 5 through 10 still execute?</strong></summary>
+
+Set the action node's **On Error** setting to **Continue (using error output)**. Wire the error output to a logging/alert node, and connect the logging node's output back into the **Loop Over Items** return terminal.
+</details>
+
+---
+
+### Exercise 4: Contextual Alerting
+<details>
+<summary><strong>Question: Name 4 essential metadata fields that should be included in an engineering error alert.</strong></summary>
+
+1. Unique item identifier (e.g. `orderId`, `customerId`).
+2. Exact error message or HTTP status code returned by the node.
+3. Timestamp of failure.
+4. Action taken (e.g. *"Logged to dead-letter queue; processing continued"*).
+</details>
+
+---
+
+# 9. Key Takeaways
+
+- **Error handling** transforms brittle automations into enterprise-grade, resilient pipelines.
+- Use **Retry On Fail** for transient network/server glitches; use **On Error** routing for data-level failures.
+- **Continue (using error output)** cleanly bifurcates success and failure streams on the canvas.
+- Reconnect both success and failure branches back to **Loop Over Items** to keep batch processing alive.
+- Provide rich, actionable context in alert notifications to make debugging instant.
+
+---
+
+<p align="center">
+  <b>Next Step:</b> Optimize pipeline performance in <a href="11_How_to_Optimize_Workflows.md">Chapter 11: Workflow Optimization</a> or return to the <a href="../README.md">Main Hub</a>.
+</p>

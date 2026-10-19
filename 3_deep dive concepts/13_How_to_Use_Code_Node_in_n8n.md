@@ -1,63 +1,93 @@
-# Chapter 13: How to Use the Code Node in n8n
-## Data structures, execution modes, and limitations
+# 💻 How to Use the Code Node in n8n
+## Bespoke JavaScript & Python Logic, Data Reshaping & Aggregations
 
-The Code node lets you write custom JavaScript or Python code inside an n8n workflow. It is useful when expressions are not enough—for example, when you need multi-step transformations, aggregation, or a completely new output dataset.
+<p align="center">
+  <a href="12_How_to_Use_Expressions_in_n8n.md">⬅️ Prev: Expressions & Functions</a> •
+  <a href="../README.md">Main Hub</a> •
+  <a href="14_n8n_Item_Linking.md">Next: Item Linking Deep Dive ➡️</a> •
+  <a href="https://github.com/shashilabs-io/n8n-docs">GitHub Repository</a>
+</p>
+
+---
+
+## 🧭 How to Use This Chapter
+
+> [!TIP]
+> **Pro-Code Freedom:** While expressions handle single-field values, complex business rules often demand loops, custom mathematical aggregations, regex parsing, and multi-step data manipulation. The **Code Node** gives you a full JavaScript (V8) or Python sandbox inside your pipeline with zero compilation steps.
+
+### 🎯 Key Outcomes of this Chapter:
+- Understand when to graduate from expressions to the **Code Node**.
+- Master the two core execution modes: **Run Once for All Items** vs **Run Once for Each Item**.
+- Master n8n's data contract: returning arrays of `{ json: { ... } }` objects.
+- Group and aggregate multi-row line items into consolidated order totals.
+- Safely enrich records using object spread syntax (`...item.json`).
+- Understand sandbox boundaries and external npm/pip module limitations.
+
+---
+
+## 📸 Code Node Interface
 
 ![Code Node Hero](code%20node.png)
 
-## Learning objectives
+---
 
-By the end of this chapter, you should be able to:
+# 1. Supported Languages & Use Cases
 
-- Explain the purpose of the Code node.
-- Choose between **Run Once for All Items** and **Run Once for Each Item**.
-- Access input data according to the selected mode.
-- Understand the output structure expected by n8n.
-- Aggregate multiple order rows into totals per order.
-- Recognize the Code node limitations described in this chapter.
+n8n supports two runtime scripting languages inside the Code node:
+- **JavaScript (Node.js / V8)** — Native, instant, and recommended for fast object transformations.
+- **Python (Pyodide)** — Ideal for data science, regex, and statistical parsing.
 
-## 1. What is the Code node?
+```mermaid
+flowchart LR
+    IN["📥 Incoming Stream<br/>(Raw items array)"] --> CN["💻 Code Node<br/>(Bespoke JS / Python Logic)"]
+    CN --> OUT["📤 Output Stream<br/>[ { json: {...} } ]"]
 
-The Code node is a single workflow step where you can write multi-line custom code to manipulate data, filter records, or generate new objects.
-
-There are two languages supported by n8n
-
-- **JavaScript** — used throughout the practical examples.
-- **Python** 
-
-Expressions are generally suited to compact, single-field transformations. The Code node is useful when the logic needs multiple statements or a custom algorithm.
-
-## 2. Choose the execution mode
-
-The Code node has two important modes.
-
-| Mode | How it works | Typical use |
-|---|---|---|
-| **Run Once for All Items** | Runs the code once with the full set of input items available | Summarizing, grouping, aggregating, or transforming a whole dataset |
-| **Run Once for Each Item** | Runs the code separately for each incoming item | Applying a transformation independently to every item |
-
-For example, if 291 items arrive at a Code node:
-
-- **Run Once for All Items:** the code executes once and can inspect all 291 items.
-- **Run Once for Each Item:** the code executes separately for each of the 291 items.
-
-Choose the mode based on the shape of the result you need, not simply on which mode appears first.
-
-## 3. Access input data
-
-The way you access input data depends on the selected mode.
-
-### Run Once for All Items
-
-In JavaScript, use `$input.all()` to access the incoming items:
-
-```javascript
-const items = $input.all();
+    style IN fill:#4A90E2,stroke:#333,stroke-width:2px,color:#fff
+    style CN fill:#F39C12,stroke:#333,stroke-width:2px,color:#fff
+    style OUT fill:#2ECC71,stroke:#333,stroke-width:2px,color:#fff
 ```
 
-The result is an array of n8n items. Each item commonly has a `json` property containing its JSON data.
+### Ideal Scenarios for the Code Node:
+- Calculating running totals, tax brackets, or currency conversions.
+- Grouping relational line-items by foreign key (`orderId`).
+- De-duplicating nested child arrays inside complex objects.
+- Constructing bespoke JSON schemas required by legacy external APIs.
 
-Example:
+---
+
+# 2. Execution Modes: All Items vs Each Item
+
+Choosing the correct execution mode is the single most important setting in the Code node:
+
+```mermaid
+flowchart TD
+    subgraph ALL["Mode 1: Run Once for All Items"]
+        A1["291 Input Items"] --> B1["Code Executes Exactly 1 Time<br/>Access via $input.all()"]
+        B1 --> C1["Returns New Array of Items"]
+    end
+
+    subgraph EACH["Mode 2: Run Once for Each Item"]
+        A2["291 Input Items"] --> B2["Code Executes 291 Separate Times<br/>Access via $json"]
+        B2 --> C2["Returns 291 Transformed Items"]
+    end
+
+    style ALL fill:#f9f9f9,stroke:#8E44AD,stroke-width:2px
+    style EACH fill:#f9f9f9,stroke:#2980B9,stroke-width:2px
+    style B1 fill:#8E44AD,stroke:#333,stroke-width:2px,color:#fff
+    style B2 fill:#2980B9,stroke:#333,stroke-width:2px,color:#fff
+```
+
+| Execution Mode | Execution Frequency | Data Accessor | Ideal Use Case |
+|---|---|---|---|
+| **Run Once for All Items** | Executes **1 time** total | `$input.all()` | Aggregation, grouping, sorting, filtering whole batches. |
+| **Run Once for Each Item** | Executes **$N$ times** (once per item) | `$json` | 1-to-1 data cleaning, calculating single fields. |
+
+---
+
+# 3. Data Access Patterns
+
+### In "Run Once for All Items" Mode:
+Access all incoming records via `$input.all()`. It returns an array of objects, each wrapping its data inside `.json`:
 
 ```javascript
 const items = $input.all();
@@ -68,27 +98,22 @@ for (const item of items) {
 }
 ```
 
-### Run Once for Each Item
-
-In JavaScript, `$json` is a convenient way to access the current item's JSON data in this mode:
+### In "Run Once for Each Item" Mode:
+Directly read and modify properties on the global `$json` object:
 
 ```javascript
 const orderId = $json.orderId;
 const totalPrice = $json.totalPrice;
 ```
 
-Use the variables and input helpers shown by the Code node's editor for the selected mode and n8n version.
+---
 
-### JavaScript and Python naming
+# 4. The Mandatory n8n Output Contract
 
-JavaScript uses `$`-prefixed helpers, while the Python option exposes corresponding helpers with underscore-style names. Python support and its limitations may change across n8n versions, so check the current Code node documentation before relying on a specific Python feature.
+> [!IMPORTANT]
+> **The Output Rule:** Downstream n8n nodes require an array of objects where each object possesses a `json` property.
 
-## 4. Understand the expected output structure
-
-A key rule is that n8n passes data between nodes as a collection of items. In the common JSON case, each item wraps its data under a `json` property.
-
-Example of two output items:
-
+### ✅ Valid Output (Array of Item Objects):
 ```javascript
 return [
   {
@@ -106,26 +131,25 @@ return [
 ];
 ```
 
-Even if the Code node creates only one output item, return it inside an array:
-
+### ❌ Invalid Output (Will Cause Node Error):
 ```javascript
-return [
-  {
-    json: {
-      message: "Processing complete"
-    }
-  }
-];
+// DO NOT DO THIS:
+return { fruit: "apple", quantity: 2 }; // Missing outer array and json key!
+return ["apple", "carrot"];              // Plain strings without json wrapper!
 ```
 
-The returned data must follow the item structure n8n expects. Returning a plain object in the wrong shape can cause an error or make the next node unable to read the expected fields.
+Even if returning only one single result item, wrap it inside an array:
+```javascript
+return [{ json: { message: "Task completed successfully" } }];
+```
 
-## 5. Example: calculate totals for each order
+---
 
-Imagine a spreadsheet has order headers, while another spreadsheet contains order details. One order may contain multiple product rows.
+# 5. Hands-on Blueprint: Aggregating Order Line Items
 
-After combining the datasets using a Merge node and matching on `orderId`, the workflow might contain rows like these:
+Imagine joining order headers with product rows. One order may have multiple line-item rows:
 
+**Raw Input (4 Rows, 2 Unique Orders):**
 ```json
 [
   { "orderId": "ORD-001", "totalPrice": 769.60 },
@@ -135,17 +159,17 @@ After combining the datasets using a Merge node and matching on `orderId`, the w
 ]
 ```
 
-The goal is to produce one result per unique order:
+```mermaid
+flowchart LR
+    A["4 Line Item Records<br/>ORD-001 (3 rows)<br/>ORD-002 (1 row)"] --> B["💻 Code Node<br/>(Run Once for All Items)"]
+    B --> C["2 Consolidated Items<br/>ORD-001: Total $1252.48<br/>ORD-002: Total $100.00"]
 
-```json
-[
-  { "orderId": "ORD-001", "orderTotal": 1252.48 },
-  { "orderId": "ORD-002", "orderTotal": 100.00 }
-]
+    style A fill:#4A90E2,stroke:#333,stroke-width:2px,color:#fff
+    style B fill:#F39C12,stroke:#333,stroke-width:2px,color:#fff
+    style C fill:#2ECC71,stroke:#333,stroke-width:2px,color:#fff
 ```
 
-### JavaScript solution
-
+### The Aggregation Script:
 Set the Code node to **Run Once for All Items**:
 
 ```javascript
@@ -167,6 +191,7 @@ for (const item of items) {
   orderTotals[orderId] += price;
 }
 
+// Map back to the required n8n output structure:
 return Object.entries(orderTotals).map(([orderId, total]) => ({
   json: {
     orderId,
@@ -175,24 +200,79 @@ return Object.entries(orderTotals).map(([orderId, total]) => ({
 }));
 ```
 
-### How the code works
+**Clean Aggregated Output:**
+```json
+[
+  { "orderId": "ORD-001", "orderTotal": 1252.48 },
+  { "orderId": "ORD-002", "orderTotal": 100.00 }
+]
+```
 
-1. `$input.all()` retrieves all incoming items.
-2. `orderTotals` stores a running total for each order ID.
-3. The loop reads each item's order ID and price.
-4. `Number(...)` converts the price to a number; the fallback handles a missing or null value as zero.
-5. The first time an order appears, its total starts at zero.
-6. Each price is added to that order's total.
-7. `Object.entries()` turns the lookup object into key-value pairs.
-8. `.map()` creates one n8n output item per order, with the required `json` wrapper.
+---
 
-The example input above produces two output items instead of four. 
+# 6. Enriching Existing Records with Object Spread
 
-**Data-quality note:** Treating a missing price as zero is only appropriate if that matches the business rule. In a production workflow, you may prefer to reject or separately report rows with missing or invalid prices.
+If your goal is to keep all incoming fields and simply append a calculated property, use the JavaScript spread operator (`...item.json`):
 
-## 6. Add a field to each existing item
+```javascript
+return $input.all().map(item => ({
+  json: {
+    ...item.json,
+    processedAt: new Date().toISOString(),
+    status: "verified"
+  }
+}));
+```
 
-If your goal is to preserve the original records and add a field, you can map over the input items:
+This guarantees that zero upstream properties are accidentally lost or overwritten.
+
+---
+
+# 7. Code Node Limitations & Sandbox Boundaries
+
+| Boundary | Restriction Details | Recommended Architecture |
+|---|---|---|
+| **External npm / pip Packages** | Restricted in n8n Cloud environments by default for security. | Use native JavaScript/Python methods or configure environment variables in self-hosted instances. |
+| **HTTP / API Calls** | The Code node should not make outbound network calls (`fetch` / `axios`). | Use dedicated **HTTP Request** nodes to benefit from credential encryption and auto-retries. |
+| **Direct Filesystem Access** | Cannot write arbitrary files to disk (`fs.writeFile`). | Use the **Read/Write Files from Disk** or cloud storage nodes. |
+
+---
+
+# 8. Common Mistakes & Troubleshooting
+
+| Bug | Cause | Fix |
+|---|---|---|
+| `Cannot read property 'json' of undefined` | Trying to access `$json` while in *Run Once for All Items* mode. | Use `$input.all()` in All Items mode, or switch mode to *Run Once for Each Item*. |
+| Output shows `[object Object]` without fields | Returned raw objects without `{ json: { ... } }` structure. | Wrap returned objects in `{ json: data }`. |
+| Dropped original fields | Overwrote the item without spreading `...item.json`. | Spread existing properties: `{ ...item.json, newProp: value }`. |
+| Missing numbers in calculations | Strings like `"100"` concatenated instead of added (`"100" + "50" = "10050"`). | Cast to numbers explicitly: `Number(item.json.price)`. |
+
+---
+
+# 9. Practice Exercises & Active Recall
+
+<details>
+<summary><strong>1. What is the fundamental difference between the two Code node execution modes?</strong></summary>
+
+"Run Once for All Items" executes once with the full dataset available via `$input.all()`. "Run Once for Each Item" executes independently for every incoming item via `$json`.
+</details>
+
+<details>
+<summary><strong>2. In JavaScript, which helper gives you access to the entire array of incoming items?</strong></summary>
+
+```javascript
+$input.all()
+```
+</details>
+
+<details>
+<summary><strong>3. Why must returned data be formatted as an array of { json: {...} } objects?</strong></summary>
+
+Because n8n's internal data engine enforces an array-of-items contract across all nodes. Failing to wrap output in `{ json: ... }` causes downstream nodes to fail.
+</details>
+
+<details>
+<summary><strong>4. How do you enrich an item with processed: true without losing existing fields?</strong></summary>
 
 ```javascript
 return $input.all().map(item => ({
@@ -202,92 +282,26 @@ return $input.all().map(item => ({
   }
 }));
 ```
+</details>
 
-This returns the same number of items and keeps the original JSON fields while adding `processed`.
+<details>
+<summary><strong>5. Should you make external HTTP calls inside the Code node?</strong></summary>
 
-Use this pattern when you want to enrich records rather than aggregate them into a different dataset.
+No. Use n8n's dedicated **HTTP Request** node. It provides visual configuration, credential encryption, proxy support, and automatic error handling.
+</details>
 
-## 7. Binary data and files
+---
 
-Most examples in this chapter use JSON data. n8n can also pass binary data, commonly associated with files.
+# 10. Key Takeaways
 
- Binary data remain under a `binary` property and notes that file-related metadata may include a file name, MIME type, and extension. When working with files, preserve the binary data structure expected by the nodes in your workflow. Use dedicated file nodes for file operations rather than assuming that ordinary JSON examples cover every binary-data case.
+- Use the **Code Node** when transformations require multi-line algorithms, loops, or complex data joins.
+- Choose **Run Once for All Items** for aggregations and datasets; choose **Run Once for Each Item** for item-level transforms.
+- Always return an array of objects wrapping properties in `json`: `[{ json: { ... } }]`.
+- Use the spread operator (`...item.json`) to preserve upstream fields.
+- Delegate HTTP and disk operations to dedicated n8n nodes.
 
-## 8. Code node limitations
+---
 
-Consider these restrictions:
-
-- In n8n Cloud, importing arbitrary external npm packages is restricted.
-- Self-hosted installations may allow additional packages when configured appropriately.
-- The Code node is not intended to access the local file system directly.
-- The Code node is not the node to use for making HTTP requests or API calls.
-
-For tasks outside the Code node's role, use dedicated workflow nodes. For example:
-
-- Use an **HTTP Request** node for HTTP/API requests.
-- Use an appropriate **read file** node for supported file-reading operations.
-
-These details can vary with n8n version, deployment type, and configuration. Consult the current official documentation before designing around a specific package or capability.
-
-## 9. Common mistakes
-
-### Returning the wrong data shape
-
-**Problem:** The code returns a plain object or an array of objects without the required `json` wrapper.
-
-**Fix:** Return an array of n8n items, each containing a `json` property for ordinary JSON output.
-
-### Choosing the wrong execution mode
-
-**Problem:** Code that expects the full dataset runs separately for each item, or item-level code is run only once.
-
-**Fix:** Use **Run Once for All Items** for grouping and aggregation. Use **Run Once for Each Item** for independent per-item work.
-
-### Accidentally losing original fields
-
-**Problem:** A mapped output contains only the new field and drops useful input data.
-
-**Fix:** Spread the original JSON object first, as in `{ ...item.json, processed: true }`, when preserving fields is intended.
-
-### Grouping records by the wrong key
-
-**Problem:** Unrelated rows are combined, or rows belonging to the same order remain separate.
-
-**Fix:** Confirm that the grouping key is stable and consistent, such as a reliable order ID.
-
-### Treating invalid prices as zero without checking
-
-**Problem:** Bad input data silently lowers totals.
-
-**Fix:** Validate the price and handle invalid rows according to the workflow's business rules.
-
-## 10. Practice questions
-
-1. What is the main purpose of the Code node?
-2. What is the difference between the two execution modes?
-3. Which helper accesses all input items in JavaScript?
-4. Why must output items use the expected n8n structure?
-5. If an order has three product rows priced at 100, 250, and 50, what is its total?
-6. Why is a lookup object useful for calculating order totals?
-7. How can you add a field while preserving the original JSON data?
-8. According to the lesson, which type of node should you use for HTTP requests?
-
-## 11. Answer key
-
-1. To write custom multi-line logic for manipulating, filtering, aggregating, or generating data.
-2. One runs once with the full input set; the other runs separately for each item.
-3. `$input.all()`.
-4. Downstream nodes expect items in a particular structure, commonly an array of objects with a `json` property.
-5. 400.
-6. It stores a running total under each order ID, allowing multiple rows to be grouped.
-7. Map over the items and return `{ json: { ...item.json, newField: value } }` for each one.
-8. An HTTP Request node.
-
-## Key takeaways
-
-- Choose the execution mode according to the operation you need.
-- Use `$input.all()` when the entire input collection must be processed together.
-- Return data in the item structure expected by n8n.
-- Aggregation can turn many detail rows into one summary item per group.
-- Validate keys and numeric values before calculating totals.
-- Use dedicated nodes for HTTP requests and file operations.
+<p align="center">
+  <b>Next Step:</b> Master data lineage and paired inputs in <a href="14_n8n_Item_Linking.md">Chapter 14: n8n Item Linking</a> or return to the <a href="../README.md">Main Hub</a>.
+</p>

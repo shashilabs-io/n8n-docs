@@ -1,201 +1,211 @@
-# Master Conditional Logic in n8n
-## If-Else, Execution Order, Branching, and Merging
+# ⚖️ Master Conditional Logic in n8n
+## If-Else, Execution Order, Branching Strategies & Merging
 
-## What you will learn
-
-By the end of this chapter, you should be able to:
-
-- Explain conditional logic using the If and Filter nodes.
-- Distinguish conditional, multi-path, and parallel branching.
-- Understand the execution order of branches in an n8n workflow.
-- Merge data from different branches into one dataset.
-- Choose a suitable workflow structure for different business requirements.
+<p align="center">
+  <a href="07_Quick_Start_Multi_App_Lead_Management.md">⬅️ Prev: Multi-App Lead Management</a> •
+  <a href="../README.md">Main Hub</a> •
+  <a href="09_Loop_Over_Items_Node.md">Next: Loop Over Items Node ➡️</a> •
+  <a href="https://github.com/shashilabs-io/n8n-docs">GitHub Repository</a>
+</p>
 
 ---
 
-## 1. Understand conditional logic
+## 🧭 How to Use This Chapter
 
-Conditional logic allows a workflow to make decisions based on incoming data.
+> [!TIP]
+> **Deterministic Decision Engines:** Automation without conditional logic is just a fragile script. By mastering the differences between binary **If** evaluation, destructive **Filter** pruning, multi-path **Switch** routing, and canvas execution sequence, you can build self-routing workflows that handle complex business edge cases reliably.
 
-It follows a simple pattern:
+### 🎯 Key Outcomes of this Chapter:
+- Contrast the behavioral differences between the **If** node and the **Filter** node.
+- Master the three foundational branching patterns: **Conditional**, **Multi-Path**, and **Parallel**.
+- Understand n8n's canvas **Execution Order** (Top-to-Bottom, Left-to-Right).
+- Join relational data across disparate branches using the **Merge** node.
+- Refactor messy duplicate workflows into high-efficiency unified execution pipelines.
 
-- If a condition is true, perform one set of actions.
-- Otherwise, perform a different set of actions.
+---
 
-Examples:
+# 1. Understanding Conditional Logic
 
-- If a support ticket is urgent, notify the manager; otherwise, assign it normally.
-- If a customer opens an email, send a follow-up; otherwise, add them to another sequence.
-- If a lead belongs to a high-priority industry, send it to the fast-track sales pipeline; otherwise, use the normal pipeline.
+Conditional logic enables automated pipelines to make intelligent decisions based on runtime data:
+- *If* a support ticket is marked **Urgent**, notify the on-call engineer; *otherwise*, queue it in the standard inbox.
+- *If* a customer clicked an email link within 24 hours, send a discount coupon; *otherwise*, enroll them in a re-engagement drip.
+- *If* an invoice exceeds $10,000, request executive approval; *otherwise*, auto-charge Stripe.
 
-In n8n, conditional logic helps workflows respond differently to different situations.
+---
 
-## 2. If node versus Filter node
+# 2. If Node vs. Filter Node: Architectural Differences
 
-Both nodes evaluate conditions, but they handle the results differently.
+Both nodes evaluate conditional expressions, but handle non-matching items fundamentally differently:
 
-### If node
+| Feature | If Node | Filter Node |
+|---|---|---|
+| **Outputs** | **Two separate branches** (`True` and `False`) | **Single output branch** (Matching items only) |
+| **Non-matching Items** | Routed to the `False` branch for alternative actions | Silently discarded from the workflow stream |
+| **Ideal Scenario** | When both outcomes require distinct actions (e.g. Approved vs Rejected) | When discarding invalid or irrelevant items permanently |
 
-The **If** node routes incoming items into two outputs:
+```mermaid
+flowchart TD
+    subgraph IF_NODE["If Node (Binary Branching)"]
+        A["Incoming Items"] --> B{"If Condition"}
+        B -->|"True"| C["Action A (Approved)"]
+        B -->|"False"| D["Action B (Rejected)"]
+    end
 
-- **True:** items that satisfy the configured conditions.
-- **False:** items that do not satisfy the conditions.
+    subgraph FILTER_NODE["Filter Node (Stream Pruning)"]
+        E["Incoming Items"] --> F{"Filter Criteria"}
+        F -->|"Match"| G["Proceed Downstream"]
+        F -.->|"No Match"| H["[Discarded / Dropped]"]
+    end
 
-Use it when both outcomes may require different actions.
+    style IF_NODE fill:#f9f9f9,stroke:#F39C12,stroke-width:2px
+    style FILTER_NODE fill:#f9f9f9,stroke:#2980B9,stroke-width:2px
+    style B fill:#F39C12,stroke:#333,stroke-width:2px,color:#fff
+    style C fill:#2ECC71,stroke:#333,stroke-width:2px,color:#fff
+    style D fill:#E74C3C,stroke:#333,stroke-width:2px,color:#fff
+    style F fill:#2980B9,stroke:#333,stroke-width:2px,color:#fff
+    style G fill:#2ECC71,stroke:#333,stroke-width:2px,color:#fff
+    style H fill:#95A5A6,stroke:#333,stroke-width:1px,color:#fff
+```
 
-### Filter node
+### Lead Qualification Example
 
-The **Filter** node keeps items that match the configured conditions and discards items that do not match. It does not provide separate true and false workflow branches.
-
-Use it when you only want matching items to continue through the workflow.
-
-### Example: qualify a sales lead
-
-Suppose a lead is qualified only when all these conditions are true:
-
-- Company name is not empty.
-- Email does not end with `gmail.com`.
-- Email does not end with `hotmail.com`.
-
-Conceptually:
+Suppose an inbound lead is qualified when:
+- `company_name` **is not empty**
+- `email` **does not end with** `gmail.com`
+- `email` **does not end with** `hotmail.com`
 
 ```text
-Company name is not empty
+company_name is not empty
 AND email does not end with "gmail.com"
 AND email does not end with "hotmail.com"
 ```
 
-With an **If** node, qualified leads go through the True output, while other leads go through False. With a **Filter** node, only qualified leads continue; non-matching items are discarded from that path.
+- With **If**: Qualified leads flow to the `True` branch (Slack alert + CRM insert), while personal emails flow to the `False` branch (archive sheet or nurturing sequence).
+- With **Filter**: Qualified leads continue; personal emails are deleted from the run.
 
-These are example business rules, not universal qualification criteria. Choose rules that fit the actual business.
+---
 
-## 3. Understand the three types of branching
+# 3. The Three Types of Branching
 
-Branching means splitting a workflow so data can follow different paths or trigger different actions.
+```mermaid
+flowchart TD
+    A["🔀 Branching Architectures in n8n"]
+    A --> B["1. Conditional Branching<br/>(If Node: True vs False)"]
+    A --> C["2. Multi-Path Branching<br/>(Switch Node: 3+ Routes)"]
+    A --> D["3. Parallel Multiplexing<br/>(Multiple Outgoing Wires)"]
 
-### A. Conditional branching
-
-Conditional branching uses an If-style decision to divide items into two outcomes.
-
-```text
-Incoming lead
-     |
-     v
-    If
-   /  \
-True  False
- |      |
-Notify  Review or
-sales   reject lead
+    style A fill:#34495E,stroke:#333,stroke-width:2px,color:#fff
+    style B fill:#F39C12,stroke:#333,stroke-width:2px,color:#fff
+    style C fill:#8E44AD,stroke:#333,stroke-width:2px,color:#fff
+    style D fill:#2ECC71,stroke:#333,stroke-width:2px,color:#fff
 ```
 
-Use conditional branching when the workflow needs different actions depending on whether a condition is true or false.
+### Type 1: Conditional Branching (Binary)
+Splits execution based on a boolean condition:
+```mermaid
+flowchart LR
+    A["Incoming Lead"] --> B{"If Node"}
+    B -->|"True"| C["Notify Sales"]
+    B -->|"False"| D["Review / Reject"]
 
-### B. Multi-path branching
-
-Multi-path branching sends data into different paths based on several possible values. The **Switch** node is useful for this pattern.
-
-For example, an order workflow may route orders based on status:
-
-- `pending` → send an email.
-- `processing` → send a Slack message.
-- `cancelled` → send an email and a Slack message.
-- `refunded` → send an email and a Slack message.
-
-```text
-             Order
-               |
-               v
-            Switch
-       /      |       |       \
-  Pending  Processing Cancelled Refunded
-     |         |         |         |
-   Email     Slack    Email +    Email +
-                      Slack      Slack
+    style A fill:#4A90E2,stroke:#333,stroke-width:2px,color:#fff
+    style B fill:#F39C12,stroke:#333,stroke-width:2px,color:#fff
+    style C fill:#2ECC71,stroke:#333,stroke-width:2px,color:#fff
+    style D fill:#95A5A6,stroke:#333,stroke-width:2px,color:#fff
 ```
 
-The Switch node can create multiple output paths according to the rules you configure.
+### Type 2: Multi-Path Branching (Categorical)
+Routes items to distinct destinations based on multiple possible values using a **Switch** node:
+```mermaid
+flowchart TD
+    O["📦 Incoming Order"] --> S{"🔀 Switch Node<br/>(orderStatus)"}
+    S -->|"Pending"| E1["📧 Email Service Team"]
+    S -->|"Processing"| SL["💬 Slack Operations"]
+    S -->|"Cancelled"| C1["📧 Email + 💬 Slack"]
+    S -->|"Refunded"| C2["📧 Email + 💬 Slack"]
 
-### C. Parallel branching
-
-Parallel branching occurs when one node connects to multiple downstream actions. The same incoming data can be used by more than one action.
-
-For example, a cancelled order may need both an email and a Slack notification.
-
-```text
-       Cancelled order
-              |
-        +-----+-----+
-        |           |
-        v           v
-      Email       Slack
+    style O fill:#4A90E2,stroke:#333,stroke-width:2px,color:#fff
+    style S fill:#8E44AD,stroke:#333,stroke-width:2px,color:#fff
+    style E1 fill:#2ECC71,stroke:#333,stroke-width:2px,color:#fff
+    style SL fill:#FFAA00,stroke:#333,stroke-width:2px,color:#000
+    style C1 fill:#E74C3C,stroke:#333,stroke-width:2px,color:#fff
+    style C2 fill:#34495E,stroke:#333,stroke-width:2px,color:#fff
 ```
 
-Use parallel branching when the same event requires multiple actions.
+### Type 3: Parallel Branching (Multiplexing)
+Dispatches the exact same item down multiple wires concurrently to trigger several independent actions:
+```mermaid
+flowchart LR
+    A["🚫 Cancelled Order"] --> B["📧 Send Customer Cancellation Email"]
+    A --> C["💬 Post Alert to #finance Slack"]
 
-## 4. Understand execution order
+    style A fill:#E74C3C,stroke:#333,stroke-width:2px,color:#fff
+    style B fill:#4A90E2,stroke:#333,stroke-width:2px,color:#fff
+    style C fill:#2ECC71,stroke:#333,stroke-width:2px,color:#fff
+```
 
-When a workflow has multiple branches, execution order matters—especially when one path depends on data or results from another.
+---
 
-The lesson's example describes these general canvas-order rules:
+# 4. Canvas Execution Order Explained
 
-1. Branches are processed in sequence.
-2. Higher branches are processed before lower branches.
-3. When branches are at the same height, the leftmost branch is processed first.
+When multiple branches diverge, understanding execution order is vital—especially if one branch writes to a database that another branch immediately reads.
 
-The exact execution behavior can depend on the workflow structure and n8n version, so test workflows that rely on a specific order.
+### n8n Canvas Execution Priority:
+1. **Branches execute sequentially** (one complete branch finishes before the next begins).
+2. **Top-to-Bottom Priority:** Higher branches on the visual canvas execute before lower branches.
+3. **Left-to-Right Priority:** When branches sit at equal vertical height, the leftmost branch executes first.
 
-### Why execution order matters
+```mermaid
+flowchart LR
+    T["⚡ Trigger"] --> B1["Branch 1 (Executes First - Higher)"]
+    T --> B2["Branch 2 (Executes Second - Lower)"]
 
-Suppose one branch prepares data that another branch needs. If the dependent path runs before the required data is ready, the workflow may produce unexpected results.
+    style T fill:#34495E,stroke:#333,stroke-width:2px,color:#fff
+    style B1 fill:#2ECC71,stroke:#333,stroke-width:2px,color:#fff
+    style B2 fill:#F39C12,stroke:#333,stroke-width:2px,color:#fff
+```
 
-Before running a multi-branch workflow, ask:
+> [!WARNING]
+> **Do Not Rely Strictly on Visual Layout for Data Dependencies:** If Branch B strictly requires data generated by Branch A, do not rely on spatial positioning alone. Use explicit wiring or a **Merge** node to enforce deterministic execution ordering!
 
-- Does one branch rely on output from another?
-- Are the nodes connected so that dependencies are explicit?
-- Does the execution view confirm the order you expect?
+---
 
-Avoid relying only on where nodes appear visually. Use the correct connections and a Merge node when the workflow must bring branch data together.
+# 5. Merging Data Across Divergent Branches
 
-## 5. Merge data from different branches
+A **Merge** node synchronizes and unifies data flowing from separate branches.
 
-A **Merge** node combines data coming from multiple inputs. It is useful when separate branches retrieve related information that later steps need together.
+### Practical Scenario: Order Header & Line Items
+Two separate queries retrieve components of an order:
 
-### Example: combine order headers and order details
-
-Imagine two Google Sheets nodes retrieve different parts of an order:
-
-**Order headers**
-
+**1. Order Header (Input 1):**
 ```json
 [
-  {
-    "orderId": "ORD-101",
-    "firstName": "Riya",
-    "lastName": "Verma",
-    "status": "pending"
-  }
+  { "orderId": "ORD-101", "firstName": "Riya", "lastName": "Verma", "status": "pending" }
 ]
 ```
 
-**Order details**
-
+**2. Order Details (Input 2):**
 ```json
 [
-  {
-    "orderId": "ORD-101",
-    "productName": "Keyboard",
-    "quantity": 1,
-    "totalPrice": 1200
-  }
+  { "orderId": "ORD-101", "productName": "Keyboard", "quantity": 1, "totalPrice": 1200 }
 ]
 ```
 
-The order header contains customer and order information. The order details contain product and pricing information. To use both in later steps, combine records using the shared `orderId` field.
+### Merging by Common Key (`orderId`):
+```mermaid
+flowchart LR
+    H["📄 Order Headers<br/>(Customer & Status)"] --> M["🔀 Merge Node<br/>(Combine by orderId)"]
+    D["📦 Order Details<br/>(Product & Price)"] --> M
+    M --> C["📋 Unified Record<br/>(Headers + Line Items)"]
 
-Conceptually, the merged record could look like:
+    style H fill:#4A90E2,stroke:#333,stroke-width:2px,color:#fff
+    style D fill:#FFAA00,stroke:#333,stroke-width:2px,color:#000
+    style M fill:#9B59B6,stroke:#333,stroke-width:2px,color:#fff
+    style C fill:#2ECC71,stroke:#333,stroke-width:2px,color:#fff
+```
 
 ```json
+// Unified Output:
 [
   {
     "orderId": "ORD-101",
@@ -209,92 +219,92 @@ Conceptually, the merged record could look like:
 ]
 ```
 
-### Configure the Merge node
+> [!NOTE]
+> If one order contains 3 line items in Input 2, the Merge node produces 3 enriched output records (a standard 1-to-Many relational join).
 
-1. Connect the order-header source to one Merge input.
-2. Connect the order-details source to the other Merge input.
-3. Choose the merge operation that combines matching records.
-4. Select `orderId` as the matching field in both inputs.
-5. Execute the node and inspect the merged output.
+---
 
-The precise option names can vary by n8n version. Confirm that the selected operation matches records by the shared key.
+# 6. Workflow Optimization: Unifying Shared Paths
 
-If one order contains several product rows, the merged output may contain several rows for that order—one per matching product detail. That is expected when the data relationship is one-to-many.
+Instead of duplicating identical notification nodes across branches, converge shared logic into a consolidated processing pipeline:
 
-## 6. Optimize workflows by combining shared actions
+```mermaid
+flowchart TD
+    SW{"🔀 Switch: Status"} -->|"Cancelled"| CP["Shared Path"]
+    SW -->|"Refunded"| CP
+    CP --> RD["🧹 Remove Duplicates"]
+    RD --> AG["📦 Aggregate Node"]
+    AG --> EM["📧 Send Email"]
+    AG --> SL["💬 Post Slack"]
 
-Suppose both cancelled and refunded orders need the same email and Slack notification. You can avoid duplicating the same action nodes by routing both types into a common path before those actions, where the workflow structure and required data allow it.
-
-A possible pattern is:
-
-```text
-Switch: Order Status
-       |                 |
-       v                 v
- Cancelled             Refunded
-       |                 |
-       +--------+--------+
-                |
-                v
-       Combine common path
-                |
-                v
-       Remove Duplicates
-                |
-                v
-             Aggregate
-             /       \
-            v         v
-          Email     Slack
+    style SW fill:#8E44AD,stroke:#333,stroke-width:2px,color:#fff
+    style CP fill:#F39C12,stroke:#333,stroke-width:2px,color:#fff
+    style RD fill:#E67E22,stroke:#333,stroke-width:2px,color:#fff
+    style AG fill:#9B59B6,stroke:#333,stroke-width:2px,color:#fff
+    style EM fill:#2ECC71,stroke:#333,stroke-width:2px,color:#fff
+    style SL fill:#16A085,stroke:#333,stroke-width:2px,color:#fff
 ```
 
-The exact nodes needed depend on the data. Use **Remove Duplicates** when repeated items must be removed, and **Aggregate** when multiple items should be collected into a summary. Neither node replaces the status-routing logic.
+This pattern drastically reduces canvas clutter and ensures message templates remain consistent in a single place.
 
-When merging branches, make sure the selected merge behavior fits the data and that the downstream nodes receive the expected number and shape of items.
+---
 
-## 7. Troubleshooting common problems
+# 7. Common Mistakes & Troubleshooting
 
-| Problem | What to check |
-|---|---|
-| Items do not reach the expected If output | Review the conditions and whether they are combined with AND or OR. |
-| Non-matching items disappear | This is expected behavior for Filter; use If if both outcomes need separate paths. |
-| The Switch node does not create the expected route | Check the configured values and each output rule. |
-| A downstream node runs with missing data | Verify dependencies and inspect the execution data for each branch. |
-| Merge produces too many rows | Check whether the matching key has multiple matches in either input. |
-| Merge does not combine records | Confirm the matching fields and the chosen merge operation. |
-| The same notification appears more than once | Check whether multiple paths send the same action and whether deduplication is required. |
-| Workflow behavior differs from the expected canvas order | Inspect the execution view and test with a small dataset. |
+| Symptom | Probable Cause | Fix |
+|---|---|---|
+| **Items take unexpected If path** | Comparison logic set to OR instead of AND (or vice versa). | Check condition combination rules (ALL vs ANY). |
+| **Non-matching items vanished** | Used a **Filter** node instead of an **If** node. | Replace Filter with If so non-matching items enter the False branch. |
+| **Switch outputs don't match rules** | Text casing mismatch (e.g. `Pending` vs `pending`). | Enable **Ignore Case** in Switch settings. |
+| **Merge produces duplicate rows** | Matching key has multiple matches on both inputs (Cartesian product). | Ensure the matching key is unique on at least one side. |
+| **Downstream node executes before data is ready** | Branches relied on visual layout rather than explicit Merge sync. | Insert a **Merge** node in **Choose Branch** or **Combine** mode. |
 
-## 8. Practice exercises
+---
 
-### Exercise A — If or Filter?
+# 8. Practice Exercises & Active Recall
 
-You need to send qualified leads to sales and send unqualified leads to a review queue. Should you use If or Filter?
+<details>
+<summary><strong>1. If you need to route qualified leads to sales and unqualified leads to a review queue, do you use If or Filter?</strong></summary>
 
-### Exercise B — Choose a branching type
+Use **If**, because both outcomes require dedicated downstream execution paths. Filter permanently drops non-matching items.
+</details>
 
-An order workflow must send `pending`, `processing`, `cancelled`, and `refunded` orders down different paths. Which node is suitable?
+<details>
+<summary><strong>2. An order pipeline routes pending, processing, cancelled, and refunded orders to separate teams. Which node is best?</strong></summary>
 
-### Exercise C — Parallel actions
+Use a **Switch** node, which supports 4+ distinct categorical output branches in a single node.
+</details>
 
-Every cancelled order must trigger both an email and a Slack notification. What branching pattern would you use?
+<details>
+<summary><strong>3. Every cancelled order must trigger both an email receipt and a Slack alert. What branching pattern is this?</strong></summary>
 
-### Exercise D — Merge two datasets
+**Parallel Multiplexing** (Type 3). Connect multiple outgoing wires from the cancelled branch to both action nodes.
+</details>
 
-One input contains customer and order information. Another contains product details. Both include `orderId`. Which node can combine matching records?
+<details>
+<summary><strong>4. One input contains customer details; another contains purchase lines. Both share orderId. Which node combines them?</strong></summary>
 
-### Exercise E — Diagnose the output
+The **Merge** node, configured to **Combine** on matching field `orderId`.
+</details>
 
-One order has three product-detail rows. After merging by `orderId`, the order appears three times. Why might this be correct?
+<details>
+<summary><strong>5. An order with 3 line items produces 3 merged records after merging by orderId. Did the Merge node fail?</strong></summary>
 
-### Suggested answers
+No! In relational data joins (1-to-Many), joining 1 order with 3 line items correctly produces 3 enriched items.
+</details>
 
-1. Use **If**, because qualified and unqualified leads need different paths.
-2. Use **Switch** for multi-path branching based on order status.
-3. Use parallel branching to connect the cancelled-order path to both actions.
-4. Use the **Merge** node and match records using `orderId`.
-5. One order can match three product rows. The merged dataset may therefore contain three rows, one for each product detail.
+---
 
-## Key takeaway
+# 9. Key Takeaways
 
-Conditional logic decides which items should follow which paths. **If** separates true and false outcomes, **Filter** keeps only matching items, **Switch** supports multiple routes, parallel branching runs multiple actions from the same data, and **Merge** combines related data from different inputs. Use these concepts together to build workflows that are clear, reliable, and easier to maintain.
+- **If** provides binary True/False branching; **Filter** removes non-matching items from the stream.
+- **Switch** handles multi-path categorization cleanly without nested nodes.
+- Canvas execution flows **Top-to-Bottom**, then **Left-to-Right**.
+- Use the **Merge** node to combine data streams across branches by unique keys.
+- Consolidate shared downstream actions to keep workflows lean and maintainable.
+
+---
+
+<p align="center">
+  <b>Next Step:</b> Master iterative processing in <a href="09_Loop_Over_Items_Node.md">Chapter 9: The Loop Over Items Node</a> or return to the <a href="../README.md">Main Hub</a>.
+</p>

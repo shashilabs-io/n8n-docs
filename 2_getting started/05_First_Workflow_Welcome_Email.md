@@ -1,282 +1,241 @@
-# Build Your First n8n Workflow
-## Automatically send welcome emails and route corporate sign-ups
+# ✉️ Build Your First n8n Workflow: Automated Welcome Email & Lead Routing
 
-### Learning objectives
-
-By the end of this chapter, you will be able to:
-
-- Explain the purpose of a webhook trigger.
-- Connect a form submission to an n8n workflow.
-- Send a personalized email using data received from the form.
-- Use an IF node to route different kinds of sign-ups.
-- Append selected customer details to Google Sheets.
-- Test a workflow, inspect its data, and avoid common mapping mistakes.
-
-> **Important:**  Google Forms sends data to an n8n Webhook using Google Apps Script. Other form services may offer their own webhook integrations. Exact interface labels can vary by n8n version.
+<p align="center">
+  <a href="04_Node_Types.md">⬅️ Prev: Node Types</a> •
+  <a href="../README.md">Main Hub</a> •
+  <a href="06_Understanding_Data.md">Next: Understanding Data ➡️</a> •
+  <a href="https://github.com/shashilabs-io/n8n-docs">GitHub Repository</a>
+</p>
 
 ---
 
-## 1. The business problem
+## 🧭 How to Use This Chapter
 
-Imagine a business receives new sign-ups through a form. A person currently has to notice each new response, send a welcome email, and record some customers for follow-up. This work is repetitive and can be automated.
+> [!TIP]
+> **Hands-On Blueprint:** In this practical tutorial, you will assemble an end-to-end production automation from scratch: capturing form submissions via Webhooks, dispatching personalized welcome emails, evaluating conditional logic with an `If` node, and appending qualified corporate leads into Google Sheets.
 
-The workflow in this chapter does three things:
+### 🎯 Key Outcomes of this Chapter:
+- Set up and understand the difference between **Test Webhook URLs** and **Production Webhook URLs**.
+- Capture incoming HTTP `POST` payloads from web forms.
+- Interpolate dynamic recipient variables using n8n expressions (`{{ $json.body.firstName }}`).
+- Route execution paths using **Boolean logic (`AND` conditions)** in an `If` node.
+- Avoid the common trap of accidentally mapping the email node's response into Google Sheets columns.
 
-1. Receives a submitted form.
-2. Sends a personalized welcome email to the submitted email address.
-3. Checks the email domain and adds sign-ups that pass the chosen condition to a Google Sheet for follow-up.
+---
 
-### Workflow at a glance
+# 1. The Real-World Business Scenario
+
+Manual lead handling causes slow response times, missed high-value opportunities, and tedious data entry. This workflow automates three key operations:
+
+1. **Instant Ingestion:** Catches form submissions the millisecond a user clicks Submit.
+2. **Personalized Confirmation:** Delivers a dynamic welcome email addressed to the lead's first name.
+3. **Automated Lead Routing:** Checks the email domain: if it appears to be a corporate address (non-free email provider), it appends the lead's details into a high-priority Google Sheet for sales follow-up.
 
 ```mermaid
 flowchart TD
-    A["Customer submits a form"] --> B["Webhook receives form data"]
-    B --> C["Send personalized welcome email"]
-    C --> D{"Email does not end with gmail.com or hotmail.com?"}
-    D -->|True| E["Append customer details to Google Sheets"]
-    D -->|False| F["End without adding to follow-up sheet"]
+    A["🌐 Form Submission Received"] --> B["⚡ Webhook Trigger (HTTP POST)"]
+    B --> C["✉️ Send Personalized Welcome Email"]
+    C --> D{"🔍 Corporate Domain Check<br/>Email NOT gmail.com<br/>AND NOT hotmail.com?"}
+    D -- True (Corporate Lead) --> E["📊 Append Row to Google Sheets"]
+    D -- False (Consumer Email) --> F["🛑 End Workflow Safely"]
+
+    style A fill:#4A90E2,stroke:#333,stroke-width:2px,color:#fff
+    style B fill:#FF6D5A,stroke:#333,stroke-width:2px,color:#fff
+    style C fill:#2ECC71,stroke:#333,stroke-width:2px,color:#fff
+    style D fill:#FFAA00,stroke:#333,stroke-width:2px,color:#000
+    style E fill:#9B59B6,stroke:#333,stroke-width:2px,color:#fff
+    style F fill:#95A5A6,stroke:#333,stroke-width:1px,color:#fff
 ```
 
-This is a teaching example, not a complete business-email verification system. The domain rule is deliberately simple and should not be treated as a reliable way to prove that an email address belongs to a company.
+---
 
-## 2. Understand the workflow components
+# 2. Workflow Components Breakdown
 
-| Component | Purpose in this workflow |
-|---|---|
-| **Google Form** | Collects first name, last name, email, and role |
-| **Google Apps Script** | Sends the form submission to the webhook URL |
-| **Webhook node** | Receives the incoming HTTP request and starts the workflow |
-| **Email action node** | Sends a welcome message using values from the submission |
-| **IF node** | Checks the email string and sends data down a true or false branch |
-| **Google Sheets action** | Appends selected form fields to a follow-up spreadsheet |
+| Component | Node / Tool | Role in Pipeline |
+|---|---|---|
+| **Intake Form** | Google Form / Typeform / Tally | Captures First Name, Last Name, Email, and Job Role. |
+| **Ingestion Trigger** | **Webhook Node** (POST) | Receives the JSON payload and wakes up the workflow. |
+| **Outbound Email** | **Email / SES / Gmail Node** | Sends a customized welcome email using dynamic expressions. |
+| **Decision Engine** | **If Node** | Evaluates string conditions using boolean `AND` rules. |
+| **Data Storage** | **Google Sheets Node** | Writes qualified corporate lead rows for sales reps. |
 
-## 3. Step 1 — Create the workflow and webhook
+---
 
-Create a new workflow in n8n and add a **Webhook** trigger. A webhook gives an external service a URL to call when an event occurs.
+# 3. Step 1: Configuring the Webhook Trigger
 
-For this example, the form submission is sent as an HTTP **POST** request because the workflow needs to receive data.
-
-### Test URL versus production URL
-
-| URL type | Purpose |
-|---|---|
-| **Test URL** | Used while testing the workflow. In the approach shown, the webhook must be listening for a test event before the request arrives. |
-| **Production URL** | Used when the workflow is configured and activated for real submissions. The external form integration must use the production URL. |
-
-A frequent testing mistake is calling the test URL while the webhook is not listening. In that situation, the test request may not be registered. Start listening for a test event, then submit the form while the listener is active.
-
-### Webhook setup checklist
-
-- [ ] Add a Webhook node.
-- [ ] Select the POST method for the incoming form data.
-- [ ] Copy the test URL for testing.
-- [ ] Start listening for a test event.
-- [ ] Send a form submission and inspect the received payload.
-- [ ] When ready for production, activate/configure the workflow and update the external integration to use the production URL.
-
-## 4. Step 2 — Send Google Forms submissions to the webhook
-
-The example uses Google Apps Script because the approach in the supplied lesson does not rely on a direct built-in Google Forms webhook option.
-
-The general data flow is:
+Add a **Webhook Node** to your canvas. When an external service pushes data to n8n, this node acts as the listening ear.
 
 ```mermaid
 flowchart LR
-    A["Google Form submitted"] --> B["Apps Script form-submit trigger"]
-    B --> C["HTTP POST to n8n webhook"]
-    C --> D["Webhook node receives payload"]
+    Form["📝 Web Form"] -->|HTTP POST JSON| Hook["⚡ n8n Webhook Node"]
+    Hook --> Output["📤 Parsed JSON Output<br/>body: { firstName, email }"]
+
+    style Form fill:#4A90E2,stroke:#333,stroke-width:2px,color:#fff
+    style Hook fill:#FF6D5A,stroke:#333,stroke-width:2px,color:#fff
+    style Output fill:#2ECC71,stroke:#333,stroke-width:1px,color:#fff
 ```
 
-The Apps Script needs to send the submitted form data to the URL stored in its configuration. Set up a form-submission trigger in Apps Script so the handler runs when the form is submitted.
+### ⚠️ Test URL vs Production URL: The Golden Rule
 
-**Do not paste a live webhook URL or secrets into public documents.** Test URLs and production URLs serve different purposes; replace the URL in the script when switching environments.
+| Webhook URL Type | When to Use | How It Behaves |
+|---|---|---|
+| **Test URL**<br/>`.../webhook-test/...` | During development & canvas testing. | **Only active for 120 seconds** while you click *"Listen for test event"*. Disappears after one test run! |
+| **Production URL**<br/>`.../webhook/...` | Live production after toggling Active to ON. | **Always active 24/7** in the background. Does not require the canvas to be open. |
 
-The supplied transcript does not include the actual Apps Script source code, so this chapter does not invent a complete script. Use the code associated with your own form integration and verify that the field names in its payload match the fields used in n8n.
+> [!CAUTION]
+> **The #1 Beginner Trap:**
+> Putting the *Test URL* into your live form and expecting it to work days later. The test URL will return `404 Webhook not found` unless you explicitly click the test button in the editor!
 
-## 5. Step 3 — Add an email action
+---
 
-After the Webhook node, add an email-sending action. The lesson uses an AWS SES email action, but the same general workflow idea can be implemented with another supported email provider or SMTP configuration.
+# 4. Step 2: Personalizing the Welcome Email
 
-Configure the email node with:
+Add an **Email Sending Node** (e.g. Gmail, AWS SES, or standard SMTP) immediately following the Webhook:
 
-- A connected credential for the email service.
-- The send-email operation.
-- A subject, such as **Welcome!**
-- A message body.
-- A sender address authorized by the email provider.
-- A recipient address taken from the submitted form.
+### Dynamic Expression Mapping
+Never hardcode fixed customer values. Use n8n's expression syntax:
 
-Credentials and sender-domain setup depend on the provider. Review permissions and keep access keys, passwords, and tokens private. For real business use, verify that the sending service is configured to deliver mail reliably and that the sender address is authorized.
-
-### Personalize the message
-
-Instead of writing a fixed message such as `Hello,`, insert the submitted person's first name dynamically.
-
-Example message:
-
-> Hello, [first name],
->
-> Thanks for signing up! We have received your details and are happy to welcome you.
->
-> Best regards,  
-> The Team
-
-The bracketed first name represents a value from the incoming form data; it is not meant to be sent literally.
-
-### n8n expressions
-
-In n8n, an **expression** lets a node configuration use data from the workflow rather than a fixed value. In the supplied example, the incoming payload contains fields under `body`, such as `firstName` and `email`.
-
-An expression can reference a value conceptually like this:
-
-```text
-{{ $json.body.firstName }}
+```javascript
+// Map recipient email
 {{ $json.body.email }}
+
+// Dynamic Subject
+Welcome to the platform, {{ $json.body.firstName }}!
 ```
 
-These examples assume the incoming data has the same `body.firstName` and `body.email` structure. Inspect your actual webhook output and adjust field names and paths to match it. Dragging a field from the input panel into a compatible parameter can help n8n create the expression.
+### Example Email Body:
+```text
+Hello {{ $json.body.firstName }},
 
-| Email field | Value to configure |
+Thank you for requesting access! We've received your details for {{ $json.body.role }}.
+Our team is reviewing your workspace and will follow up shortly.
+
+Best regards,
+The Customer Success Team
+```
+
+| Email Field | Expression / Configuration |
 |---|---|
-| **To** | The email address from the submitted form |
-| **Subject** | A fixed subject, e.g. `Welcome!` |
-| **Body** | A message that includes the submitted first name |
-| **From** | A sender address authorized by the configured service |
+| **To** | `{{ $json.body.email }}` |
+| **Subject** | `Welcome, {{ $json.body.firstName }}!` |
+| **From** | `team@yourdomain.com` (Authorized Sender) |
+| **Body Type** | Plain Text or HTML |
 
-## 6. Step 4 — Add an IF node to route sign-ups
+---
 
-The example classifies a sign-up as a potential corporate lead when the email does **not** end with `gmail.com` and does **not** end with `hotmail.com`.
+# 5. Step 3: Conditional Routing with the If Node
+
+Connect an **If Node** after the email action. Configure it to route potential corporate leads to your sales spreadsheet:
 
 ```mermaid
 flowchart TD
-    A["Form payload"] --> B["IF: email does not end with gmail.com"]
-    B --> C{"Also does not end with hotmail.com?"}
-    C -->|True: both conditions pass| D["Potential corporate lead"]
-    C -->|False: a condition fails| E["Other sign-up"]
+    In["📥 Incoming Email String"] --> C1{"Rule 1:<br/>Does NOT end with '@gmail.com'"}
+    C1 -- Yes --> C2{"Rule 2 (AND):<br/>Does NOT end with '@hotmail.com'"}
+    C1 -- No --> False["False Branch (Consumer)"]
+    C2 -- Yes --> True["True Branch (Corporate Lead)"]
+    C2 -- No --> False
+
+    style In fill:#3498DB,stroke:#333,stroke-width:1px,color:#fff
+    style C1 fill:#FFAA00,stroke:#333,stroke-width:2px,color:#000
+    style C2 fill:#FFAA00,stroke:#333,stroke-width:2px,color:#000
+    style True fill:#2ECC71,stroke:#333,stroke-width:2px,color:#fff
+    style False fill:#E74C3C,stroke:#333,stroke-width:1px,color:#fff
 ```
 
-For this rule, the conditions should be joined with **AND**:
+### ⚙️ If Node Settings:
+- **Combine Rules:** Set to **AND** (All conditions must be satisfied).
+- **Condition 1:** String &rarr; `{{ $('Webhook').item.json.body.email }}` &rarr; **Does not end with** &rarr; `@gmail.com`
+- **Condition 2:** String &rarr; `{{ $('Webhook').item.json.body.email }}` &rarr; **Does not end with** &rarr; `@hotmail.com`
 
-- Email does not end with `gmail.com`.
-- Email does not end with `hotmail.com`.
+> [!IMPORTANT]
+> **Source Node Reference:**
+> Notice that the expression explicitly reads from `$('Webhook')` rather than the preceding email node. The email node output contains `{ messageId: '...' }`, not the user's original email address!
 
-Both conditions must be true for the record to go down the true branch.
+---
 
-### Important limitation
+# 6. Step 4: Appending Leads to Google Sheets
 
-This is only a rough example. It may classify many non-corporate domains as corporate, and it may miss free email providers other than Gmail and Hotmail. A company may also use Gmail or another hosted email service. A production workflow should use a more carefully designed rule and should not claim to verify a company's identity based only on this check.
+Connect a **Google Sheets Node** to the **True branch** of the If node.
 
-### Read data from the correct node
+- **Resource:** Document
+- **Operation:** Append row
+- **Spreadsheet:** Select your Sales Leads sheet.
+- **Mapping Mode:** Choose **Map Each Column Manually**.
 
-The email action's output may contain only information about the send operation, such as a status or message ID. The original form fields are available from the webhook node's output.
+### 📋 Field Mapping Configuration
 
-If the IF node needs the submitted email address, make sure its expression refers to the **webhook data**, not an unrelated output from the email-sending action. Inspect the actual node data and choose the correct source.
-
-## 7. Step 5 — Add qualifying sign-ups to Google Sheets
-
-Connect a Google Sheets node to the **true** output of the IF node. Choose the operation that appends a row to the follow-up sheet.
-
-The target spreadsheet in the example has columns like:
-
-- First name
-- Last name
-- Email
-- Role
-
-Connect the appropriate Google Sheets credential, select the spreadsheet and sheet, and map each destination column to the corresponding field from the webhook payload.
-
-### Manual mapping versus automatic mapping
-
-| Mapping method | What it means | What to check |
-|---|---|---|
-| **Manual mapping** | Choose the source value for each destination column | Confirm each column references the intended webhook field |
-| **Automatic mapping** | n8n attempts to match incoming field names to sheet columns | Confirm the incoming item contains the expected fields and structure |
-
-**Beginner recommendation:** use manual mapping while learning. It makes the source of each value explicit and helps prevent accidentally writing the email action's response into customer columns.
-
-Example mapping (adjust paths to match the real payload):
-
-| Google Sheets column | Source value |
+| Target Sheet Column | Source Expression (from Webhook) |
 |---|---|
-| First name | Webhook → `body.firstName` |
-| Last name | Webhook → `body.lastName` |
-| Email | Webhook → `body.email` |
-| Role | Webhook → `body.role` |
+| **First Name** | `{{ $('Webhook').item.json.body.firstName }}` |
+| **Last Name** | `{{ $('Webhook').item.json.body.lastName }}` |
+| **Email** | `{{ $('Webhook').item.json.body.email }}` |
+| **Role** | `{{ $('Webhook').item.json.body.role }}` |
+| **Timestamp** | `{{ $now.toISO() }}` |
 
-Do not assume these exact capitalization conventions are present in every form. The form, Apps Script payload, and sheet headings must agree.
+---
 
-## 8. Test the full workflow
+# 7. Step-by-Step Testing & Verification Routine
 
-Test one stage at a time before testing the complete process.
+Always test each node individually before testing end-to-end:
 
-1. Put the Webhook node into test-listening mode.
-2. Submit a test form.
-3. Verify that the webhook receives the expected fields.
-4. Check that the email action uses the intended recipient and personalized name.
-5. Test with an address that meets the IF rule and verify the true branch.
-6. Test with an address that fails the rule and verify the false branch.
-7. Confirm that only the intended customer fields are appended to the spreadsheet.
-8. Check the final email and sheet row before switching to production.
+1. **Step 1:** Put Webhook node into *"Listen for test event"* mode.
+2. **Step 2:** Submit your test form with sample data: `john@acmecorp.com`.
+3. **Step 3:** Confirm the Webhook turns green and displays the JSON payload.
+4. **Step 4:** Execute the Email node and confirm the email arrives in your inbox.
+5. **Step 5:** Execute the If node and verify that `john@acmecorp.com` routes to the **True** branch.
+6. **Step 6:** Execute the Google Sheets node and verify that a new row appears in your spreadsheet.
+7. **Step 7:** Re-test with `sarah@gmail.com` and verify that the If node routes to **False** (no sheet row added).
 
-Use test addresses and data you control. Avoid sending messages to people who have not agreed to receive them.
+---
 
-## 9. Troubleshooting guide
+# 8. Troubleshooting Common Errors
 
-| Symptom | Likely cause to inspect | What to do |
+| Symptom | Root Cause | Fix |
 |---|---|---|
-| Webhook request is not registered | Test listener is inactive, or the wrong URL is being called | Start listening and confirm the test URL; use the production URL only for the active production workflow |
-| Webhook receives no expected fields | Apps Script payload shape or field names differ | Inspect the webhook output and compare its keys with the configured expressions |
-| Welcome email contains literal placeholder text | The value was entered as fixed text instead of a working expression | Use a dynamic expression and verify the preview |
-| Email goes to the wrong address | Recipient field references the wrong property | Map the recipient from the webhook's email field |
-| IF node chooses the unexpected branch | Conditions, AND/OR logic, or field path is wrong | Inspect the input and test each condition against sample addresses |
-| Sheet receives a message ID or status instead of customer details | Mapping uses the email node output or automatic mapping does not fit the payload | Map each sheet column explicitly from the webhook data |
-| No row appears in the sheet | The record went down the false branch, credentials are wrong, or sheet/column selection is incorrect | Inspect the IF branch, credentials, selected sheet, and append-row output |
+| **`404 Webhook not found`** | Test URL was called without clicking *"Listen for test event"*, or workflow is inactive. | Either click the test button in canvas or activate the workflow and use the Production URL. |
+| **Email has literal text `{{ $json.body.firstName }}`** | Entered in fixed-text mode instead of Expression mode. | Click the expression toggle `{{}}` on the input parameter before pasting. |
+| **Sheet gets message ID instead of customer name** | Sheet column mapped from preceding Email node instead of Webhook. | Update the expression to reference `$('Webhook').item.json.body...`. |
+| **If node routes all emails to True** | Combined with `OR` instead of `AND`. | Change condition joiner to **AND**. |
 
-## 10. Ideas to extend the workflow
+---
 
-Once the basic version works, consider these extensions:
+# 9. Active Recall Quiz
 
-- Add qualifying leads to a CRM.
-- Notify a sales or marketing channel when a potential corporate lead signs up.
-- Improve the email-domain classification rule.
-- Add a delay before sending a follow-up message.
-- Add validation and error handling for missing or malformed form fields.
-- Store processing status so repeated webhook deliveries do not create duplicate follow-up rows.
+<details>
+<summary><strong>1. Why must you switch from the Test URL to the Production URL before launching?</strong></summary>
 
-Each extension should be tested independently before being used in a live workflow.
+The **Test URL** is temporary and only responds while you are manually listening in the editor. The **Production URL** runs 24/7 in the background when the workflow is activated.
+</details>
 
-## 11. Practice exercise
+<details>
+<summary><strong>2. Why should the two domain exclusion checks use `AND` instead of `OR`?</strong></summary>
 
-Build the workflow with your own test form and spreadsheet.
+Because an email address cannot be both `@gmail.com` and `@hotmail.com` simultaneously. Using `OR` would result in every single email evaluating to `true`.
+</details>
 
-- [ ] Create a webhook trigger using POST.
-- [ ] Send a test form submission to it.
-- [ ] Add a personalized welcome email action.
-- [ ] Use expressions for the recipient and first name.
-- [ ] Add an IF node with two conditions joined by AND.
-- [ ] Connect the true branch to a Google Sheets append-row action.
-- [ ] Manually map first name, last name, email, and role.
-- [ ] Test one email that passes the rule and one that fails.
-- [ ] Confirm the email and spreadsheet output are correct.
+<details>
+<summary><strong>3. If an intermediate node only outputs `{ success: true }`, how do downstream nodes access the original form data?</strong></summary>
 
-### Knowledge check
+By using cross-node expressions: `{{ $('Webhook').item.json.body.fieldName }}`.
+</details>
 
-1. What role does the webhook play?
-2. Why must the test URL and production URL be treated differently?
-3. Why is an expression useful in the email body?
-4. Why should the two “does not end with” conditions use AND for this rule?
-5. Why might automatic mapping place the wrong values in a spreadsheet?
-6. Does a non-Gmail, non-Hotmail address prove that a lead is a corporate customer?
+<details>
+<summary><strong>4. Why is manual column mapping recommended over automatic mapping in Google Sheets?</strong></summary>
 
-**Answers**
+Manual mapping gives you explicit, predictable control over exactly which incoming properties write into specific sheet columns, preventing accidental schema corruption.
+</details>
 
-1. It receives an external HTTP request and triggers the workflow.
-2. The test URL is used for testing with a listening test webhook; the production URL is used for the activated production workflow.
-3. It inserts values from the submitted form so the email can be personalized.
-4. Both conditions must be true for the address to pass the stated rule.
-5. The incoming item may contain the email action's response rather than the original form fields, or field names may not match the columns.
-6. No. It is only a rough classification rule and does not verify company identity.
+---
 
-## Chapter summary
+# 10. Key Takeaways
 
-The workflow connects a form submission to a webhook, sends a personalized welcome email, checks the email string with an IF node, and appends qualifying details to Google Sheets. The most important implementation lessons are to test the webhook with the correct URL, use expressions for dynamic values, reference the original webhook payload when necessary, and map spreadsheet columns deliberately. The email-domain check is only an example and should be strengthened before production use.
+- Webhooks provide real-time, event-driven workflow initiation.
+- Expressions allow dynamic data interpolation across any prior node in the workflow.
+- Boolean logic (`If` node) enables sophisticated lead qualification and multi-path routing.
+- Always perform a pre-flight test with both qualifying and non-qualifying inputs before activating in production.
+
+---
+
+<p align="center">
+  <b>Next Step:</b> Master n8n's foundational data engine in <a href="06_Understanding_Data.md">Chapter 6: Understanding Data in n8n</a> or return to the <a href="../README.md">Main Hub</a>.
+</p>

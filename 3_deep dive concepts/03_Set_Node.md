@@ -1,18 +1,32 @@
-# How to Use the Set Node in n8n
+# 📝 How to Use the Set / Edit Fields Node in n8n
+## Reshaping, Cleaning, and Mapping Workflow Data
 
-### What you will learn
-By the end of this lesson, you should be able to:
-- Explain why workflows often need to reshape data before passing it to another node.
-- Use the Set node (called **Edit Fields** in newer n8n versions) to add, change, or remove fields.
-- Choose between manual field mapping and JSON-style input where available.
-- Understand the difference between keeping other fields and keeping only the fields you define.
-- Build a practical workflow that prepares clean data for an email or API request.
+<p align="center">
+  <a href="02_Merge_Node.md">⬅️ Prev: Merge Node</a> •
+  <a href="../README.md">Main Hub</a> •
+  <a href="04_Aggregate_Node.md">Next: Aggregate Node ➡️</a> •
+  <a href="https://github.com/shashilabs-io/n8n-docs">GitHub Repository</a>
+</p>
 
 ---
 
-## 1. Start with a business problem
+## 🧭 How to Use This Chapter
 
-Imagine a user signs up for your learning platform. Your signup form produces data like this:
+> [!TIP]
+> **Data Hygiene:** In modern data automation, incoming payloads rarely match downstream API schemas. The **Edit Fields (Set)** node acts as your primary data transformer—enabling you to construct composite keys, strip sensitive or unnecessary fields, normalize naming conventions, and cast data types with zero custom code.
+
+### 🎯 Key Outcomes of this Chapter:
+- Understand why workflows need to reshape data between triggers and destination actions.
+- Use the **Edit Fields (Set)** node to add, update, rename, or drop JSON properties.
+- Choose between manual field mapping and JSON-style configuration modes.
+- Master the **Include Other Input Fields** toggle to control data leakage vs preservation.
+- Build a hands-on data preparation pipeline: **Raw Form Submission &rarr; Cleaned Customer Record &rarr; Welcome Email**.
+
+---
+
+# 1. The Business Problem: Mismatched Data Contracts
+
+Imagine a user signs up on your learning platform. Your web form produces a raw payload like this:
 
 ```json
 {
@@ -25,114 +39,127 @@ Imagine a user signs up for your learning platform. Your signup form produces da
 }
 ```
 
-The data is valid, but the next node may not need every field. Perhaps you want to send a welcome email and store a clean customer record with:
-- `fullName`
-- `email`
-- `source`
-- `signupDate`
+While the data is valid, downstream nodes (like CRM systems or marketing tools) often require a different contract:
+- `fullName` instead of separate first/last names
+- `email` instead of `email_address`
+- A static `source: "website"` tag
+- `signupDate` instead of `submitted_at`
+- Removal of internal metadata like `internal_form_id`
 
-You could pass the original data through unchanged, but it would be harder to work with downstream if fields have inconsistent names or contain information you don't need. This is where the **Set** node—called **Edit Fields** in newer n8n versions—helps.
+```mermaid
+flowchart LR
+    A["Raw Form Data<br/>(first_name, last_name, internal_id)"] --> B["📝 Edit Fields (Set) Node"]
+    B --> C["Clean Customer Record<br/>(fullName, email, source)"]
 
-Its job is to shape the data: create fields, update values, rename fields by mapping them to new names, and optionally remove fields you don't want to pass forward.
-
-## 2. Where the Set / Edit Fields node fits
-
-A simple workflow could be:
-
-```text
-Form Trigger
-    |
-    v
-Set / Edit Fields
-    |
-    v
-Send Welcome Email
+    style A fill:#4A90E2,stroke:#333,stroke-width:2px,color:#fff
+    style B fill:#F39C12,stroke:#333,stroke-width:2px,color:#fff
+    style C fill:#2ECC71,stroke:#333,stroke-width:2px,color:#fff
 ```
 
-The trigger receives the original signup data. The Set/Edit Fields node transforms it into the structure you want. The email node then uses the cleaned-up values.
+Passing messy, unrenamed data downstream increases brittle field mappings and causes silent failures. The **Edit Fields (Set)** node solves this by serving as the data shaping filter of your pipeline.
 
-The Set node does not send the email itself. It prepares the data for a later node.
+---
 
-## 3. Add the node and choose how to edit fields
+# 2. Where the Set / Edit Fields Node Fits
 
-1. Open your n8n workflow.
-2. Add the **Edit Fields (Set)** node. In older versions it may appear as **Set**; in newer versions it is commonly labeled **Edit Fields**.
-3. Connect it after the node that provides the input data.
-4. Open its configuration and choose the available editing method.
+```mermaid
+flowchart TD
+    A["📋 Form Trigger<br/>(Receives Raw User Input)"] --> B["📝 Edit Fields (Set)<br/>(Transforms & Normalizes Fields)"]
+    B --> C["📧 Send Welcome Email<br/>(Consumes Cleaned Keys)"]
 
-In the manual field-mapping interface, you typically add fields one at a time and specify a name, type, and value. Depending on your n8n version, the node may also offer a JSON-style mode for defining multiple fields together.
+    style A fill:#34495E,stroke:#333,stroke-width:2px,color:#fff
+    style B fill:#F39C12,stroke:#333,stroke-width:2px,color:#fff
+    style C fill:#2ECC71,stroke:#333,stroke-width:2px,color:#fff
+```
 
-The exact labels and layout can differ between versions, but the goal is the same: define the output data you want.
+The trigger captures incoming user inputs. The Edit Fields node normalizes properties into the exact schema desired. The downstream email or database node consumes only the standardized values.
 
-## 4. Add a new field: create `fullName`
+> [!NOTE]
+> The Edit Fields node does not contact external services or send messages itself. It strictly shapes in-memory JSON data for subsequent nodes.
 
-Suppose the input contains separate `first_name` and `last_name` fields, but your email template needs one `fullName` field.
+---
 
-Add a field:
+# 3. Adding and Configuring the Node
+
+1. Open your workflow in the n8n canvas editor.
+2. Search for and add the **Edit Fields (Set)** node.
+   *(In older n8n versions this node is labeled **Set**; in newer releases it is labeled **Edit Fields**).*
+3. Connect it directly after the data source node.
+4. Select your preferred configuration mode: **Manual Mapping** or **JSON Mode**.
+
+In manual mode, you add individual field rows defining:
+- **Field Name:** The target property name in the output object.
+- **Type:** String, Number, Boolean, Array, or Object.
+- **Value:** Fixed text or a dynamic expression.
+
+---
+
+# 4. Adding Derived Fields: Generating `fullName`
+
+Suppose your input contains separate `first_name` and `last_name` properties, but your email template expects a single `fullName` field.
+
+### Configuration:
 - **Name:** `fullName`
-- **Type:** String
-- **Value:** an expression that joins the two input values.
+- **Type:** `String`
+- **Value (Expression):**
+  ```javascript
+  {{ $json.first_name + " " + $json.last_name }}
+  ```
 
-An n8n expression can look like this:
-
-```text
-{{ $json.first_name + " " + $json.last_name }}
-```
-
-For the sample input, the result is:
-
+### Resulting Output:
 ```json
 {
   "fullName": "Riya Verma"
 }
 ```
 
-This expression reads the two properties from the current item and joins them with a space. Expressions are evaluated for each item that passes through the node.
+Expressions evaluate dynamically for every item processed in the current batch.
 
-If the source fields have different names in your workflow, use the exact names shown in the incoming data.
+> [!TIP]
+> Always verify the exact case and spelling of source keys in your input panel. If the source field is `First_Name`, an expression referencing `first_name` evaluates to `undefined`.
 
-## 5. Rename or remap fields
+---
 
-A common data-cleaning task is converting field names from one naming convention to another.
+# 5. Renaming and Remapping Fields
 
-For example:
+A frequent pipeline requirement is translating legacy or proprietary field names into clean, standard schema keys:
 
-| Original field | New field |
-|---|---|
-| `email_address` | `email` |
-| `submitted_at` | `signupDate` |
-| `phone_number` | `phone` |
+| Original Input Key | Desired Standardized Key | Expression to Apply |
+|---|---|---|
+| `email_address` | `email` | `{{ $json.email_address }}` |
+| `submitted_at` | `signupDate` | `{{ $json.submitted_at }}` |
+| `phone_number` | `phone` | `{{ $json.phone_number }}` |
 
-In Edit Fields, add a field with the desired output name and set its value from the original field. For example:
+This mapping creates a clean output interface for downstream nodes without altering the upstream source data.
 
-```text
-{{ $json.email_address }}
+---
+
+# 6. Preserving vs Stripping Other Input Fields
+
+One of the most consequential configurations in the Edit Fields node is the **Include Other Input Fields** setting.
+
+```mermaid
+flowchart TD
+    IN["Incoming: { first_name, last_name, email, internal_id }"] --> SW{"Include Other<br/>Input Fields?"}
+    SW -->|"Enabled (True)"| OUT1["Output:<br/>{ first_name, last_name, internal_id, fullName, email }"]
+    SW -->|"Disabled (False)"| OUT2["Output (Clean):<br/>{ fullName, email, phone, source }"]
+
+    style IN fill:#4A90E2,stroke:#333,stroke-width:2px,color:#fff
+    style SW fill:#F39C12,stroke:#333,stroke-width:2px,color:#fff
+    style OUT1 fill:#95A5A6,stroke:#333,stroke-width:2px,color:#fff
+    style OUT2 fill:#2ECC71,stroke:#333,stroke-width:2px,color:#fff
 ```
 
-for the new `email` field.
+### Option A — Keep Other Input Fields (Enabled)
+The output retains all original fields alongside newly created or mapped fields.
+- **Best for:** Exploratory workflow development where downstream nodes may still require unmapped attributes.
 
-This is a mapping operation: you are not changing the source form's column name; you are creating an output field with the name your later nodes expect.
-
-## 6. Keep or remove the other input fields
-
-One of the most important settings is whether to keep fields that you have not explicitly defined.
-
-### Option A — Keep other input fields
-
-If you enable the option to include or keep other input fields, the output can contain the original fields plus the new or mapped fields.
-
-This is useful when:
-- Later nodes may need other original values.
-- You want to add a few derived fields without losing the rest of the record.
-- You are still exploring the input data.
-
-### Option B — Keep only the fields you define
-
-If you disable the option to keep other input fields, the output is limited to the fields you define in the node.
-
-For our signup example, the desired output could be:
+### Option B — Keep Only Defined Fields (Disabled)
+The output strips every property not explicitly created within this node.
+- **Best for:** Production API calls, database inserts, and webhook payloads requiring strict, predictable, sanitized schemas.
 
 ```json
+// Clean Sanitized Output:
 {
   "fullName": "Riya Verma",
   "email": "riya@example.com",
@@ -142,107 +169,95 @@ For our signup example, the desired output could be:
 }
 ```
 
-The fields `internal_form_id` and the original unrenamed fields are not passed forward unless you add them explicitly.
+> [!IMPORTANT]
+> When disabling "Include Other Input Fields", internal tokens (like `internal_form_id`) are stripped. If a downstream node relies on an unmapped field, that node will fail. Always test and inspect the node output panel after toggling this option!
 
-This is useful when you want a predictable, clean output structure. However, be careful: if a later node needs a field that you removed, that field will no longer be available from this node's output.
+---
 
-> Practical habit: after changing this setting, execute the node and inspect its output. Do not assume a field is still present—verify it.
+# 7. Hands-on Tutorial: Customer Ingestion Pipeline
 
-## 7. Build the example step by step
+### Step 1 — Inspect Incoming Data
+Execute the trigger step to produce a test payload with `first_name`, `last_name`, and `email_address`.
 
-### Step 1 — Inspect the incoming data
+### Step 2 — Attach Edit Fields (Set)
+Place the Edit Fields node directly after the trigger.
 
-Run the trigger or previous node. Confirm that the expected fields exist, including `first_name`, `last_name`, and `email_address`.
+### Step 3 — Define Normalized Fields
 
-### Step 2 — Add the Edit Fields node
+| Output Field | Type | Value / Expression | Notes |
+|---|---|---|---|
+| `fullName` | String | `{{ $json.first_name + " " + $json.last_name }}` | Concatenates names |
+| `email` | String | `{{ $json.email_address }}` | Remaps email |
+| `phone` | String | `{{ $json.phone_number }}` | Remaps phone |
+| `source` | String | `website` | Hardcoded literal |
+| `signupDate` | String | `{{ $json.submitted_at }}` | Remaps timestamp |
 
-Connect it directly after the trigger.
+### Step 4 — Toggle Schema Cleanliness
+Turn **Include Other Input Fields** to **Off** to discard `internal_form_id`.
 
-### Step 3 — Define the output fields
+### Step 5 — Test and Validate
+Click **Test step** and inspect the output in JSON view. Confirm that the full name, email, and date values are properly formatted.
 
-Create these fields:
+### Step 6 — Connect Downstream Email Node
+Add a Send Email node referencing the mapped fields:
+- **To:** `{{ $json.email }}`
+- **Subject:** `Welcome to the Platform, {{ $json.fullName }}!`
+- **Body:**
+  ```text
+  Hi {{ $json.fullName }},
 
-| Output field | Type | Value |
-|---|---|---|
-| `fullName` | String | `{{ $json.first_name + " " + $json.last_name }}` |
-| `email` | String | `{{ $json.email_address }}` |
-| `phone` | String | `{{ $json.phone_number }}` |
-| `source` | String | `website` |
-| `signupDate` | String | `{{ $json.submitted_at }}` |
+  Welcome to our learning platform! We're glad you're here.
+  ```
 
-For `source`, use a fixed text value. For the other fields, use expressions that read the incoming item.
+---
 
-### Step 4 — Decide which original fields to keep
+# 8. JSON-Style Configuration
 
-For a clean output object, turn off the option to keep other input fields and define everything needed by later nodes. If you want to preserve additional data, enable the setting and inspect the resulting structure.
-
-### Step 5 — Test the node
-
-Execute the Edit Fields node and inspect the output. It should contain the values you defined. Confirm that the full name is joined correctly and that the email and signup date are not missing.
-
-### Step 6 — Connect the email node
-
-Connect a Send Email node after Edit Fields. Use the output `email` as the recipient and `fullName` in the email body.
-
-Example email text:
-
-```text
-Hi {{ $json.fullName }},
-
-Welcome to our learning platform! We're glad you're here.
-```
-
-The expression syntax shown here is illustrative of n8n expressions. Configure your actual email node and credentials separately.
-
-## 8. JSON-style editing
-
-Some versions and configurations of the Edit Fields node provide a JSON-style editing mode. Instead of adding each field through the UI, you can define the desired object together.
-
-For the clean signup output, the intended structure is conceptually:
+For experienced developers or bulk transformations, some n8n versions support direct JSON input mode:
 
 ```json
 {
-  "fullName": "{{ $json.first_name + ' ' + $json.last_name }}",
-  "email": "{{ $json.email_address }}",
-  "phone": "{{ $json.phone_number }}",
+  "fullName": "={{ $json.first_name + ' ' + $json.last_name }}",
+  "email": "={{ $json.email_address }}",
+  "phone": "={{ $json.phone_number }}",
   "source": "website",
-  "signupDate": "{{ $json.submitted_at }}"
+  "signupDate": "={{ $json.submitted_at }}"
 }
 ```
 
-This snippet illustrates the intended mapping, not necessarily a paste-ready JSON configuration for every n8n version. Some interfaces require expressions to be entered using their expression controls rather than as quoted template strings in raw JSON. Follow the mode's UI instructions and test the output.
+> [!NOTE]
+> In raw JSON mode, prepend expressions with `=` so n8n interprets brackets dynamically rather than as literal string values.
 
-Use manual mapping if you prefer to configure fields one at a time. Use JSON-style editing when you are comfortable describing the complete output structure together.
+---
 
-## 9. Common mistakes and troubleshooting
+# 9. Common Mistakes & Troubleshooting
 
-| Problem | What to check |
-|---|---|
-| `fullName` is empty or incomplete | Verify the spelling of `first_name` and `last_name` in the input data. |
-| Expressions appear as literal text | Make sure the field is in expression mode where required. |
-| Original fields disappear | Check whether the option to keep/include other input fields is disabled. |
-| A later node cannot find `email_address` | You may have mapped it to `email` and removed the original field. Update the later node to use the new name. |
-| A field has the wrong type | Check the field type selected in Edit Fields and the data returned by the source. |
-| A tutorial's node name or setting differs | Your n8n version may use the newer **Edit Fields** label or a different UI layout. |
-| A downstream email is sent to the wrong address | Inspect the output and ensure the recipient expression uses the intended field. |
+| Symptom | Probable Cause | Fix |
+|---|---|---|
+| `fullName` displays as `undefined undefined` | Property names in expressions don't match the input keys. | Inspect input JSON and match keys exactly (e.g. `firstName` vs `first_name`). |
+| Expression renders literally (`{{ ... }}`) | Field is in Fixed text mode instead of Expression mode. | Click the Expression toggle button (`FX`) on the input field. |
+| Upstream fields disappeared | "Include Other Input Fields" was toggled off. | Explicitly add needed fields to the mapping or re-enable the toggle. |
+| Downstream node throws `field not found` | The downstream node is still referencing the old unmapped key. | Update downstream references to use the newly mapped output field name. |
+| Value type converted to string | Incorrect type selected in the dropdown. | Select Number or Boolean explicitly in the field type selector. |
 
-## 10. When should you use the Set / Edit Fields node?
+---
 
-Use it when you need to:
-- Create a derived field such as `fullName`.
-- Rename or map fields into a consistent naming convention.
-- Add a constant value such as `source: "website"`.
-- Keep only the fields needed by the next node.
-- Prepare data for an email, database insert, API request, or another workflow step.
+# 10. When to Use Edit Fields (Set)
 
-It is not a replacement for every transformation. For complicated calculations, repeated data structures, or more advanced logic, you may need other nodes or expressions. Start with Edit Fields when the main job is simply to shape the data.
+Use Edit Fields when you need to:
+- Construct composite fields (e.g. `fullName`, full address strings).
+- Rename or normalize field names across APIs.
+- Inject static metadata (e.g. `environment: "production"`, `source: "form"`).
+- Filter out sensitive, internal, or bloated properties before sending payloads externally.
+- Format clean records for emails, databases, and third-party webhooks.
 
-## 11. Practice exercises
+---
 
-### Exercise A — Create a display name
+# 11. Practice Exercises & Active Recall
 
-Input:
+### Exercise A: Display Name Creation
 
+**Input:**
 ```json
 {
   "firstName": "Kabir",
@@ -251,12 +266,20 @@ Input:
 }
 ```
 
-Create a `displayName` field containing `Kabir Das`.
+<details>
+<summary><strong>Task: How do you configure a displayName field containing "Kabir Das"?</strong></summary>
 
-### Exercise B — Prepare a clean order record
+Create a String field named `displayName` with the expression:
+```javascript
+{{ $json.firstName + " " + $json.lastName }}
+```
+</details>
 
-Input:
+---
 
+### Exercise B: Clean Order Record
+
+**Input:**
 ```json
 {
   "order_id": "ORD-205",
@@ -266,37 +289,36 @@ Input:
 }
 ```
 
-Use Edit Fields to output only:
-- `orderId`
-- `email`
-- `amount`
+<details>
+<summary><strong>Task: Configure the node to output orderId, email, and amount, dropping debug_token.</strong></summary>
 
-Do not pass `debug_token` to the next node.
-
-### Exercise C — Keep or remove original fields?
-
-You add `fullName` to a record and need the original `email_address` field for a later node. What should you check in the setting for keeping other input fields, and why?
-
-### Answer key
-
-**Exercise A**
-
-Use a String field named `displayName` with the expression:
-
-```text
-{{ $json.firstName + " " + $json.lastName }}
-```
-
-**Exercise B**
-
-Map `order_id` to `orderId`, `customer_email` to `email`, and preserve `amount`. Turn off the option to keep other input fields if you want only these three output fields.
-
-**Exercise C**
-
-If the original fields are not explicitly defined, ensure the option to keep/include other input fields is enabled—or create an output field for the original email. Otherwise, the original field may be absent from the output.
+1. Map `orderId` to `{{ $json.order_id }}`
+2. Map `email` to `{{ $json.customer_email }}`
+3. Map `amount` to `{{ $json.amount }}`
+4. Set **Include Other Input Fields** to **Off** so `debug_token` is discarded.
+</details>
 
 ---
 
-## Key takeaway
+### Exercise C: Field Preservation Logic
 
-The Set node—now commonly called **Edit Fields**—is a data-shaping node. It lets you add fields, map existing values into new names, define constant values, and control whether the original fields remain in the output. Always inspect the node's output before connecting it to later steps.
+<details>
+<summary><strong>Question: If you add fullName to a record and a downstream node requires the original email_address, what setting must you verify?</strong></summary>
+
+You must verify that **Include Other Input Fields** is turned **On**, OR explicitly define a mapped output field for `email_address`. If disabled, unmapped original fields will be excluded from the node output.
+</details>
+
+---
+
+# 12. Key Takeaways
+
+- The **Edit Fields (Set)** node is n8n's primary data-shaping tool.
+- Use expressions with `{{ $json.fieldName }}` to generate dynamic values from incoming items.
+- Control output schema cleanliness with the **Include Other Input Fields** setting.
+- Always inspect the node's JSON output panel to verify property names and data types before wiring downstream actions.
+
+---
+
+<p align="center">
+  <b>Next Step:</b> Learn how to group and summarize data in <a href="04_Aggregate_Node.md">Chapter 4: The Aggregate Node</a> or return to the <a href="../README.md">Main Hub</a>.
+</p>
